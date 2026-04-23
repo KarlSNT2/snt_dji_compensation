@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<module>
+	<name>snt_dji_compensation</name>
+	<displayName><![CDATA[SNT Compensation DJI]]></displayName>
+	<version><![CDATA[1.0.0]]></version>
+	<description><![CDATA[Ce module permet aux clients d'effectuer leur déclaration de compensation DJI lors de périodes de promotion]]></description>
+	<author><![CDATA[SNT2]]></author>
+	<tab><![CDATA[administration]]></tab>
+	<is_configurable>1</is_configurable>
+	<need_instance>0</need_instance>
+</module>

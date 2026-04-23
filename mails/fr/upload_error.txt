@@ -1,0 +1,23 @@
+Erreur d'upload - Compensation DJI
+===================================
+
+Une erreur d'upload s'est produite sur le module Compensation DJI de votre boutique {shop_name}.
+
+DETAILS DE L'ERREUR
+-------------------
+Type d'erreur : {error_type}
+Message : {error_message}
+Fichier : {filename}
+
+INFORMATIONS CLIENT
+-------------------
+Client : {customer_name}
+Email : {customer_email}
+Societe : {customer_company}
+ID Client : {customer_id}
+ID Declaration : {declaration_id}
+
+Date : {date}
+
+---
+Email automatique genere par le module SNT Compensation DJI

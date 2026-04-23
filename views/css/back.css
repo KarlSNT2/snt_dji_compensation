@@ -1,0 +1,200 @@
+/**
+ * SNT DJI Compensation - Back Office CSS
+ *
+ * @author    SNT2
+ * @copyright 2007-2026 PrestaShop SA
+ * @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
+ */
+
+/* Panel styling */
+.dji-compensation-panel .panel-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dji-compensation-panel .badge {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+
+/* Statistics wells */
+.dji-compensation-panel .well {
+    margin-bottom: 0;
+    padding: 15px 10px;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+}
+
+.dji-compensation-panel .well h3 {
+    margin: 0 0 5px 0;
+    font-size: 28px;
+    font-weight: 600;
+}
+
+.dji-compensation-panel .well small {
+    color: #6c757d;
+}
+
+/* Declaration table */
+.dji-compensation-panel table.table {
+    margin-bottom: 0;
+}
+
+.dji-compensation-panel table.table thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.dji-compensation-panel table.table tbody tr:hover {
+    background-color: #f5f5f5;
+}
+
+.dji-compensation-panel table.table .label {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+/* Dropdown menu */
+.dji-compensation-panel .dropdown-menu {
+    min-width: 140px;
+}
+
+.dji-compensation-panel .dropdown-menu > li > a {
+    padding: 6px 15px;
+    cursor: pointer;
+}
+
+.dji-compensation-panel .dropdown-menu > li > a:hover {
+    background-color: #f5f5f5;
+}
+
+/* Buttons */
+.dji-compensation-panel .btn-group .btn {
+    margin-left: 2px;
+}
+
+.dji-compensation-panel .btn-xs {
+    padding: 2px 6px;
+    font-size: 11px;
+}
+
+/* Modal */
+#declaration-details-modal .modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+#declaration-details-modal .detail-section {
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eee;
+}
+
+#declaration-details-modal .detail-section:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+#declaration-details-modal .detail-section h5 {
+    margin-bottom: 15px;
+    padding-bottom: 5px;
+    border-bottom: 2px solid #007bff;
+    display: inline-block;
+}
+
+#declaration-details-modal .file-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#declaration-details-modal .file-list li {
+    padding: 8px 10px;
+    background-color: #f8f9fa;
+    margin-bottom: 5px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+#declaration-details-modal .file-list li .btn {
+    flex-shrink: 0;
+}
+
+/* Admin notes textarea */
+.admin-notes-textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    resize: vertical;
+}
+
+/* Status labels */
+.label-default {
+    background-color: #6c757d;
+}
+
+.label-info {
+    background-color: #17a2b8;
+}
+
+.label-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.label-success {
+    background-color: #28a745;
+}
+
+.label-danger {
+    background-color: #dc3545;
+}
+
+/* Configuration page */
+.dji-config-panel .panel {
+    margin-bottom: 20px;
+}
+
+.dji-config-panel .panel-heading {
+    background-color: #f8f9fa;
+}
+
+.dji-config-panel .btn-primary {
+    margin-top: 10px;
+}
+
+/* Loading state */
+.loading {
+    opacity: 0.5;
+    pointer-events: none;
+    position: relative;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #007bff;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
