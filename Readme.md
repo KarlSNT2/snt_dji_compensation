@@ -247,14 +247,120 @@ Retourne le contenu du fichier template XLSX des promotions DJI.
       "Produit": "Mavic 3",
       "Prix": "1599.00",
       "Remise": "10%"
-    },
-    {
-      "Reference": "DJI-002",
-      "Produit": "Mini 4 Pro",
-      "Prix": "799.00",
-      "Remise": "15%"
     }
   ]
+}
+```
+
+#### GET /api/dji-compensation/declarations-to-process
+
+Retourne les declarations avec status=submitted, pretes a etre analysees.
+
+**Parametres :**
+| Parametre | Type | Description |
+|-----------|------|-------------|
+| limit | int | Nombre max de resultats (defaut: 50) |
+| offset | int | Decalage pour pagination |
+
+**Reponse :**
+```json
+{
+  "success": true,
+  "total": 5,
+  "count": 5,
+  "offset": 0,
+  "declarations": [
+    {
+      "id_declaration": 1,
+      "id_customer": 704,
+      "reference": "DJI-A1B2C3D4",
+      "status": "submitted",
+      "invoices_count": 3,
+      "stock_proofs_count": 0
+    }
+  ]
+}
+```
+
+#### GET /api/dji-compensation/declaration-xlsx
+
+Retourne les lignes declarees du fichier XLSX client (lignes avec quantite remplie).
+
+**Parametres :**
+| Parametre | Type | Description |
+|-----------|------|-------------|
+| id_declaration | int | ID de la declaration (requis) |
+
+**Reponse :**
+```json
+{
+  "success": true,
+  "id_declaration": 1,
+  "id_customer": 704,
+  "reference": "DJI-A1B2C3D4",
+  "total_rows": 150,
+  "declared_lines_count": 4,
+  "declared_lines": [
+    {
+      "reference_article": "AR0057378",
+      "produit": "Osmo Action 5 Pro",
+      "ean": "6941565981066",
+      "quantite_declaree": 2,
+      "prix_promo_ttc": 318.99,
+      "compensation_ht": 18.01
+    }
+  ]
+}
+```
+
+#### GET /api/dji-compensation/invoices-urls
+
+Retourne les URLs S3 pre-signees pour telecharger les factures PDF.
+
+**Parametres :**
+| Parametre | Type | Description |
+|-----------|------|-------------|
+| id_declaration | int | ID de la declaration (requis) |
+| expires_in | int | Duree de validite en secondes (defaut: 3600) |
+
+**Reponse :**
+```json
+{
+  "success": true,
+  "id_declaration": 1,
+  "invoices_count": 2,
+  "invoices": [
+    {
+      "id_invoice": 1,
+      "original_filename": "facture_001.pdf",
+      "s3_key": "declarations/704/1/invoices/facture_001.pdf",
+      "file_size": 71382,
+      "presigned_url": "https://bucket.s3.fr-par.scw.cloud/...",
+      "expires_in": 3600
+    }
+  ]
+}
+```
+
+#### GET/POST /api/dji-compensation/update-status
+
+Met a jour le statut d'une declaration.
+
+**Parametres :**
+| Parametre | Type | Description |
+|-----------|------|-------------|
+| id_declaration | int | ID de la declaration (requis) |
+| status | string | Nouveau statut : draft, submitted, processing, validated, rejected (requis) |
+| admin_notes | string | Notes administrateur (optionnel) |
+
+**Reponse :**
+```json
+{
+  "success": true,
+  "id_declaration": 1,
+  "old_status": "submitted",
+  "new_status": "validated",
+  "message": "Status updated successfully"
 }
 ```
 
@@ -301,3 +407,30 @@ CREATE TABLE dji_promotions (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 ```
+
+#### Workflow d'analyse automatique des declarations
+
+Le module supporte un workflow n8n complet pour analyser automatiquement les declarations soumises :
+
+1. **Recuperation des declarations** : `GET /declarations-to-process`
+2. **Extraction des lignes declarees** : `GET /declaration-xlsx`
+3. **Analyse des factures PDF** : Via Mistral API (OCR)
+4. **Verification des coherences** :
+   - Quantites declarees vs facturees
+   - Prix factures vs prix promotions (tolerance 5€)
+5. **Mise a jour du statut** : `GET /update-status`
+
+**Matching des produits** (ordre de priorite) :
+1. Code EAN (13 chiffres)
+2. Reference article
+3. Designation partielle (2+ mots communs)
+
+**Types de resultats** :
+- `ok` : Ligne verifiee sans probleme
+- `article_non_facture` : Article declare non trouve dans les factures
+- `quantite_mismatch` : Ecart entre quantite declaree et facturee
+- `prix_mismatch` : Ecart de prix > 5€ vs promotion
+
+**Tables PostgreSQL requises** : voir `scripts-sql/create_analyse_tables.sql`
+
+**Template workflow n8n** : voir `temp/workflow_analyse_declarations.json`

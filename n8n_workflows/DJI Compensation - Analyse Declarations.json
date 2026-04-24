@@ -1,0 +1,1844 @@
+{
+  "name": "DJI Compensation - Analyse Declarations",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "=https://dev-prestashop-2224c0698cb3.prestashop.sh/index.php?fc=module&module=snt_dji_compensation&controller=api&action=declarations-to-process&api_key=b6cae5823d3827937a476b345772446ad8ada4d79dc7557d4f41220501698935",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {}
+      },
+      "id": "7545ac50-2a46-4d0c-b2a3-feee6f920c23",
+      "name": "GET Declarations to Process",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2864,
+        208
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "RcQ2z2vXydxGQuhz",
+          "name": "API Key Presta Module"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "check-declarations",
+              "leftValue": "={{ $json.declarations.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "264b5c0f-7ef2-4250-8c8e-b6c6df8e0e00",
+      "name": "Has Declarations?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -2640,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "declarations",
+        "options": {}
+      },
+      "id": "e59ac0d8-85a5-48ef-ad3c-7c92715fbda6",
+      "name": "Split Declarations",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -2416,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://dev-prestashop-2224c0698cb3.prestashop.sh/index.php?fc=module&module=snt_dji_compensation&controller=api&action=declaration-xlsx&id_declaration={{ $json.id_declaration }}&api_key=b6cae5823d3827937a476b345772446ad8ada4d79dc7557d4f41220501698935",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {}
+      },
+      "id": "8675a70b-99c1-4c36-9ad5-7c2501881597",
+      "name": "GET Declaration XLSX",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2208,
+        112
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "RcQ2z2vXydxGQuhz",
+          "name": "API Key Presta Module"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transformer les lignes declarees pour INSERT PostgreSQL\nconst input = $input.first().json;\nconst declaredLines = input.declared_lines || [];\n\nif (declaredLines.length === 0) {\n  return [];\n}\n\nconst result = declaredLines.map(line => ({\n  json: {\n    id_declaration: input.id_declaration,\n    id_customer: input.id_customer,\n    reference_article: line.reference_article,\n    produit: line.produit,\n    ean: line.ean,\n    quantite_declaree: line.quantite_declaree,\n    prix_vente_ttc: line.prix_vente_ttc,\n    prix_promo_ttc: line.prix_promo_ttc,\n    compensation_ht: line.compensation_ht,\n    montant_avoir: line.montant_avoir,\n    date_debut: line.date_debut,\n    date_fin: line.date_fin,\n    date_butoir: line.date_butoir,\n    numero_serie: line.numero_serie,\n    reference_avoir: line.reference_avoir\n  }\n}));\n\nreturn result;"
+      },
+      "id": "8f564c78-db15-426e-ace2-9d8cf6670cfc",
+      "name": "Transform Declaration Lines",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "declaration_lignes",
+        "columns": {
+          "0": "i",
+          "1": "d",
+          "2": "_",
+          "3": "d",
+          "4": "e",
+          "5": "c",
+          "6": "l",
+          "7": "a",
+          "8": "r",
+          "9": "a",
+          "10": "t",
+          "11": "i",
+          "12": "o",
+          "13": "n",
+          "14": ",",
+          "15": "i",
+          "16": "d",
+          "17": "_",
+          "18": "c",
+          "19": "u",
+          "20": "s",
+          "21": "t",
+          "22": "o",
+          "23": "m",
+          "24": "e",
+          "25": "r",
+          "26": ",",
+          "27": "r",
+          "28": "e",
+          "29": "f",
+          "30": "e",
+          "31": "r",
+          "32": "e",
+          "33": "n",
+          "34": "c",
+          "35": "e",
+          "36": "_",
+          "37": "a",
+          "38": "r",
+          "39": "t",
+          "40": "i",
+          "41": "c",
+          "42": "l",
+          "43": "e",
+          "44": ",",
+          "45": "p",
+          "46": "r",
+          "47": "o",
+          "48": "d",
+          "49": "u",
+          "50": "i",
+          "51": "t",
+          "52": ",",
+          "53": "e",
+          "54": "a",
+          "55": "n",
+          "56": ",",
+          "57": "q",
+          "58": "u",
+          "59": "a",
+          "60": "n",
+          "61": "t",
+          "62": "i",
+          "63": "t",
+          "64": "e",
+          "65": "_",
+          "66": "d",
+          "67": "e",
+          "68": "c",
+          "69": "l",
+          "70": "a",
+          "71": "r",
+          "72": "e",
+          "73": "e",
+          "74": ",",
+          "75": "p",
+          "76": "r",
+          "77": "i",
+          "78": "x",
+          "79": "_",
+          "80": "v",
+          "81": "e",
+          "82": "n",
+          "83": "t",
+          "84": "e",
+          "85": "_",
+          "86": "t",
+          "87": "t",
+          "88": "c",
+          "89": ",",
+          "90": "p",
+          "91": "r",
+          "92": "i",
+          "93": "x",
+          "94": "_",
+          "95": "p",
+          "96": "r",
+          "97": "o",
+          "98": "m",
+          "99": "o",
+          "100": "_",
+          "101": "t",
+          "102": "t",
+          "103": "c",
+          "104": ",",
+          "105": "c",
+          "106": "o",
+          "107": "m",
+          "108": "p",
+          "109": "e",
+          "110": "n",
+          "111": "s",
+          "112": "a",
+          "113": "t",
+          "114": "i",
+          "115": "o",
+          "116": "n",
+          "117": "_",
+          "118": "h",
+          "119": "t",
+          "120": ",",
+          "121": "m",
+          "122": "o",
+          "123": "n",
+          "124": "t",
+          "125": "a",
+          "126": "n",
+          "127": "t",
+          "128": "_",
+          "129": "a",
+          "130": "v",
+          "131": "o",
+          "132": "i",
+          "133": "r",
+          "134": ",",
+          "135": "d",
+          "136": "a",
+          "137": "t",
+          "138": "e",
+          "139": "_",
+          "140": "d",
+          "141": "e",
+          "142": "b",
+          "143": "u",
+          "144": "t",
+          "145": ",",
+          "146": "d",
+          "147": "a",
+          "148": "t",
+          "149": "e",
+          "150": "_",
+          "151": "f",
+          "152": "i",
+          "153": "n",
+          "154": ",",
+          "155": "d",
+          "156": "a",
+          "157": "t",
+          "158": "e",
+          "159": "_",
+          "160": "b",
+          "161": "u",
+          "162": "t",
+          "163": "o",
+          "164": "i",
+          "165": "r",
+          "166": ",",
+          "167": "n",
+          "168": "u",
+          "169": "m",
+          "170": "e",
+          "171": "r",
+          "172": "o",
+          "173": "_",
+          "174": "s",
+          "175": "e",
+          "176": "r",
+          "177": "i",
+          "178": "e",
+          "179": ",",
+          "180": "r",
+          "181": "e",
+          "182": "f",
+          "183": "e",
+          "184": "r",
+          "185": "e",
+          "186": "n",
+          "187": "c",
+          "188": "e",
+          "189": "_",
+          "190": "a",
+          "191": "v",
+          "192": "o",
+          "193": "i",
+          "194": "r",
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "id": 0,
+            "id_declaration": 0,
+            "id_customer": 0,
+            "quantite_declaree": 0,
+            "prix_vente_ttc": 0,
+            "prix_promo_ttc": 0,
+            "compensation_ht": 0,
+            "montant_avoir": 0
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "id_declaration",
+              "displayName": "id_declaration",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "id_customer",
+              "displayName": "id_customer",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "reference_article",
+              "displayName": "reference_article",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "produit",
+              "displayName": "produit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ean",
+              "displayName": "ean",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "quantite_declaree",
+              "displayName": "quantite_declaree",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "prix_vente_ttc",
+              "displayName": "prix_vente_ttc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "prix_promo_ttc",
+              "displayName": "prix_promo_ttc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "compensation_ht",
+              "displayName": "compensation_ht",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "montant_avoir",
+              "displayName": "montant_avoir",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "date_debut",
+              "displayName": "date_debut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "date_fin",
+              "displayName": "date_fin",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "date_butoir",
+              "displayName": "date_butoir",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "numero_serie",
+              "displayName": "numero_serie",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "reference_avoir",
+              "displayName": "reference_avoir",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "5564bf46-ea3d-49d9-b02b-067ffb501a31",
+      "name": "INSERT Declaration Lignes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1760,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dISm0QOG03jvqYLL",
+          "name": "DB externe"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://dev-prestashop-2224c0698cb3.prestashop.sh/index.php?fc=module&module=snt_dji_compensation&controller=api&action=invoices-urls&id_declaration={{ $json.id_declaration }}&api_key=b6cae5823d3827937a476b345772446ad8ada4d79dc7557d4f41220501698935",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {}
+      },
+      "id": "cd9ac003-2a8d-4978-811b-716f8b9de65c",
+      "name": "GET Invoices URLs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1536,
+        112
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "RcQ2z2vXydxGQuhz",
+          "name": "API Key Presta Module"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "invoices",
+        "options": {}
+      },
+      "id": "d5b4765f-4c19-46ae-8cae-ad620a04eebf",
+      "name": "Split Invoices",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -1328,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.mistral_body }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 2000
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "08057135-1c01-4e5c-8471-1641f2737afc",
+      "name": "Mistral Analyse Facture",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -544,
+        112
+      ],
+      "executeOnce": false,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "k6ikSnBi18hxsrWy",
+          "name": "Bearer Auth account"
+        }
+      },
+      "notes": "Timeout 2min car OCR peut etre long"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];                \nfor (let i = 0; i < items.length; i++) {\n  const mistralResponse = items[i].json;\n  const invoice = $('Split Invoices').all()[i]?.json || {};\n\n  let parsed;\n  try {\n    const content = mistralResponse.choices[0].message.content;\n    parsed = typeof content === 'string' ? JSON.parse(content) : content;\n  } catch (e) {\n    results.push({\n      json: {\n        error: 'Parse error',\n        id_invoice: invoice.id_invoice,\n        raw: mistralResponse.choices?.[0]?.message?.content || 'No content'\n      }\n    });\n    continue;\n  }\n\n  results.push({\n    json: {\n      id_invoice: invoice.id_invoice,\n      id_declaration: $('GET Declaration XLSX').first().json.id_declaration,\n      s3_key: invoice.s3_key,\n      numero_facture: parsed.numero_facture,\n      date_facture: parsed.date_facture,\n      total_ttc: parsed.total_ttc,\n      raw_response: JSON.stringify(parsed),\n      lignes: parsed.lignes || []\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "b9bdb11e-3f80-4b13-b591-7cf5d8f6a8f2",
+      "name": "Parse Mistral Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "factures_analysees",
+        "columns": {
+          "0": "i",
+          "1": "d",
+          "2": "_",
+          "3": "i",
+          "4": "n",
+          "5": "v",
+          "6": "o",
+          "7": "i",
+          "8": "c",
+          "9": "e",
+          "10": ",",
+          "11": "i",
+          "12": "d",
+          "13": "_",
+          "14": "d",
+          "15": "e",
+          "16": "c",
+          "17": "l",
+          "18": "a",
+          "19": "r",
+          "20": "a",
+          "21": "t",
+          "22": "i",
+          "23": "o",
+          "24": "n",
+          "25": ",",
+          "26": "s",
+          "27": "3",
+          "28": "_",
+          "29": "k",
+          "30": "e",
+          "31": "y",
+          "32": ",",
+          "33": "n",
+          "34": "u",
+          "35": "m",
+          "36": "e",
+          "37": "r",
+          "38": "o",
+          "39": "_",
+          "40": "f",
+          "41": "a",
+          "42": "c",
+          "43": "t",
+          "44": "u",
+          "45": "r",
+          "46": "e",
+          "47": ",",
+          "48": "d",
+          "49": "a",
+          "50": "t",
+          "51": "e",
+          "52": "_",
+          "53": "f",
+          "54": "a",
+          "55": "c",
+          "56": "t",
+          "57": "u",
+          "58": "r",
+          "59": "e",
+          "60": ",",
+          "61": "t",
+          "62": "o",
+          "63": "t",
+          "64": "a",
+          "65": "l",
+          "66": "_",
+          "67": "t",
+          "68": "t",
+          "69": "c",
+          "70": ",",
+          "71": "r",
+          "72": "a",
+          "73": "w",
+          "74": "_",
+          "75": "r",
+          "76": "e",
+          "77": "s",
+          "78": "p",
+          "79": "o",
+          "80": "n",
+          "81": "s",
+          "82": "e",
+          "mappingMode": "defineBelow",
+          "value": {
+            "id_invoice": "={{ $json.id_invoice }}",
+            "id_declaration": "={{ $json.id_declaration }}",
+            "total_ttc": "={{ $json.total_ttc }}",
+            "s3_key": "={{ $json.s3_key }}",
+            "numero_facture": "={{ $json.numero_facture }}",
+            "date_facture": "={{ $json.date_facture }}",
+            "raw_response": "={{ $json.raw_response }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "id_invoice",
+              "displayName": "id_invoice",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "id_declaration",
+              "displayName": "id_declaration",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "s3_key",
+              "displayName": "s3_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "numero_facture",
+              "displayName": "numero_facture",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "date_facture",
+              "displayName": "date_facture",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "total_ttc",
+              "displayName": "total_ttc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "raw_response",
+              "displayName": "raw_response",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "analyzed_at",
+              "displayName": "analyzed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "868b40fd-8684-4c22-9809-d3851f2d3f11",
+      "name": "INSERT Facture Analysee",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -48,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dISm0QOG03jvqYLL",
+          "name": "DB externe"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\nfor (const item of $input.all()) {\n    const factureId = item.json.id;\n    const lignes = item.json.raw_response?.lignes || [];\n\n    for (const ligne of lignes) {\n      // Ignorer les remises (prix négatif)\n      if (ligne.prix_unitaire_ttc < 0) continue;\n\n      results.push({\n        json: {\n          id_facture_analysee: factureId,\n          reference_article: ligne.reference || null,\n          ean: ligne.ean || null,\n          numero_serie: ligne.numero_serie || null,\n          designation: ligne.designation || null,\n          quantite: ligne.quantite || 1,\n          prix_unitaire_ttc: ligne.prix_unitaire_ttc || 0\n        }\n      });\n    }\n  }\n\n  return results;"
+      },
+      "id": "7605fce3-6239-41df-b32d-8ed6e150f7b8",
+      "name": "Prepare Facture Produits",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "factures_produits",
+        "columns": {
+          "0": "i",
+          "1": "d",
+          "2": "_",
+          "3": "f",
+          "4": "a",
+          "5": "c",
+          "6": "t",
+          "7": "u",
+          "8": "r",
+          "9": "e",
+          "10": "_",
+          "11": "a",
+          "12": "n",
+          "13": "a",
+          "14": "l",
+          "15": "y",
+          "16": "s",
+          "17": "e",
+          "18": "e",
+          "19": ",",
+          "20": "r",
+          "21": "e",
+          "22": "f",
+          "23": "e",
+          "24": "r",
+          "25": "e",
+          "26": "n",
+          "27": "c",
+          "28": "e",
+          "29": "_",
+          "30": "a",
+          "31": "r",
+          "32": "t",
+          "33": "i",
+          "34": "c",
+          "35": "l",
+          "36": "e",
+          "37": ",",
+          "38": "d",
+          "39": "e",
+          "40": "s",
+          "41": "i",
+          "42": "g",
+          "43": "n",
+          "44": "a",
+          "45": "t",
+          "46": "i",
+          "47": "o",
+          "48": "n",
+          "49": ",",
+          "50": "q",
+          "51": "u",
+          "52": "a",
+          "53": "n",
+          "54": "t",
+          "55": "i",
+          "56": "t",
+          "57": "e",
+          "58": ",",
+          "59": "p",
+          "60": "r",
+          "61": "i",
+          "62": "x",
+          "63": "_",
+          "64": "u",
+          "65": "n",
+          "66": "i",
+          "67": "t",
+          "68": "a",
+          "69": "i",
+          "70": "r",
+          "71": "e",
+          "72": "_",
+          "73": "t",
+          "74": "t",
+          "75": "c",
+          "76": ",",
+          "77": "p",
+          "78": "r",
+          "79": "i",
+          "80": "x",
+          "81": "_",
+          "82": "l",
+          "83": "i",
+          "84": "g",
+          "85": "n",
+          "86": "e",
+          "87": "_",
+          "88": "t",
+          "89": "t",
+          "90": "c",
+          "mappingMode": "defineBelow",
+          "value": {
+            "id_facture_analysee": "={{ $json.id_facture_analysee }}",
+            "quantite": "={{ $json.quantite }}",
+            "prix_unitaire_ttc": "={{ $json.prix_unitaire_ttc }}",
+            "prix_ligne_ttc": "={{ $json.prix_ligne_ttc }}",
+            "reference_article": "={{ $json.reference_article }}",
+            "designation": "={{ $json.designation }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "id_facture_analysee",
+              "displayName": "id_facture_analysee",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "reference_article",
+              "displayName": "reference_article",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "designation",
+              "displayName": "designation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "quantite",
+              "displayName": "quantite",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "prix_unitaire_ttc",
+              "displayName": "prix_unitaire_ttc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "prix_ligne_ttc",
+              "displayName": "prix_ligne_ttc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "5b99958d-0a92-49ac-8dae-9ae92c64a330",
+      "name": "INSERT Facture Produits",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        416,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dISm0QOG03jvqYLL",
+          "name": "DB externe"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM declaration_lignes WHERE id_declaration = $1",
+        "options": {
+          "queryReplacement": "={{ $('GET Declaration XLSX').first().json.id_declaration }}"
+        }
+      },
+      "id": "b26319e8-7bd3-4b08-93a2-e06390bbcf9f",
+      "name": "GET Declaration Lignes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        688,
+        112
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "dISm0QOG03jvqYLL",
+          "name": "DB externe"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT fp.*, fa.id_declaration\n  FROM factures_produits fp\n  JOIN factures_analysees fa ON fa.id = fp.id_facture_analysee\n  WHERE fa.id_declaration = $1",
+        "options": {
+          "queryReplacement": "={{ $('GET Declaration XLSX').first().json.id_declaration }}"
+        }
+      },
+      "id": "34ad9100-363b-47a7-bdff-381c4ca4ecf2",
+      "name": "GET Factures Produits",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        960,
+        112
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "dISm0QOG03jvqYLL",
+          "name": "DB externe"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM promotions_dji",
+        "options": {}
+      },
+      "id": "2df1ae3f-735b-42a3-acf4-cca5153ec98c",
+      "name": "GET Promotions DJI",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1216,
+        112
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "dISm0QOG03jvqYLL",
+          "name": "DB externe"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const TOLERANCE_PRIX = 5.00;                                                                  \n   \nconst declarationLignes = $('GET Declaration Lignes').all();                                  \nconst facturesProduits = $('GET Factures Produits').all();\nconst promotions = $('GET Promotions DJI').all();\nconst idDeclaration = $('GET Declaration XLSX').first().json.id_declaration;\n\nconst resultats = [];  // Toutes les lignes (OK + anomalies)\n\n// Index des produits facturés\nconst factures = facturesProduits.map(p => p.json);\n\n// Index des promotions par EAN et par référence\nconst promosByEan = {};\nconst promosByRef = {};\nconst promosByName = [];\n\nfor (const promo of promotions) {\n  const p = promo.json;\n  if (p.ean) promosByEan[p.ean.trim()] = p;\n  if (p.reference_article) promosByRef[p.reference_article.toUpperCase().trim()] = p;\n  promosByName.push({\n    name: (p.produit || '').toUpperCase(),\n    promo: p\n  });\n}\n\n// Fonction de match partiel (au moins 2 mots en commun)\nfunction matchPartiel(designation, promosName) {\n  const words = designation.toUpperCase().replace(/[^A-Z0-9\\s]/g, '').split(/\\s+/).filter(w =>\n w.length > 2);\n  let bestMatch = null;\n  let bestScore = 0;\n\n  for (const item of promosName) {\n    const promoWords = item.name.replace(/[^A-Z0-9\\s]/g, '').split(/\\s+/).filter(w => w.length\n > 2);\n    const common = words.filter(w => promoWords.some(pw => pw.includes(w) || w.includes(pw)));\n    const score = common.length;\n\n    if (score >= 2 && score > bestScore) {\n      bestScore = score;\n      bestMatch = item.promo;\n    }\n  }\n  return bestMatch;\n}\n\n// Fonction pour trouver une promo : EAN > Référence > Nom partiel\nfunction findPromo(ligne) {\n  // 1. Match EAN\n  if (ligne.ean && promosByEan[ligne.ean.trim()]) {\n    return { promo: promosByEan[ligne.ean.trim()], method: 'ean' };\n  }\n\n  // 2. Match Référence\n  const ref = (ligne.reference_article || ligne.reference || '').toUpperCase().trim();\n  if (ref && promosByRef[ref]) {\n    return { promo: promosByRef[ref], method: 'reference' };\n  }\n\n  // 3. Match partiel désignation\n  const designation = ligne.designation || ligne.produit || '';\n  if (designation) {\n    const match = matchPartiel(designation, promosByName);\n    if (match) {\n      return { promo: match, method: 'designation_partielle' };\n    }\n  }\n\n  return null;\n}\n\n// Agréger les quantités facturées par produit matchable\nconst factureAggregated = {};\n\nfor (const f of factures) {\n  if (f.quantite <= 0 || f.prix_unitaire_ttc < 0) continue; // Ignorer remises\n\n  const match = findPromo(f);\n  if (match) {\n    const key = match.promo.reference_article.toUpperCase().trim();\n    if (!factureAggregated[key]) {\n      factureAggregated[key] = {\n        quantite: 0,\n        prix_unitaire: parseFloat(f.prix_unitaire_ttc) || 0,\n        promo: match.promo,\n        method: match.method\n      };\n    }\n    factureAggregated[key].quantite += f.quantite;\n  }\n}\n\n// Vérifier chaque ligne déclarée\nfor (const ligne of declarationLignes) {\n  const l = ligne.json;\n  const ref = (l.reference_article || '').toUpperCase().trim();\n  if (!ref) continue;\n\n  const qteDeclaree = l.quantite_declaree || 0;\n  const facture = factureAggregated[ref];\n  const promo = promosByRef[ref];\n\n  // 1. Article déclaré non trouvé dans les factures\n  if (!facture) {\n    resultats.push({\n      json: {\n        id_declaration: idDeclaration,\n        reference_article: ref,\n        type_anomalie: 'article_non_facture',\n        quantite_declaree: qteDeclaree,\n        quantite_facturee: 0,\n        prix_facture: null,\n        prix_promo: promo ? parseFloat(promo.nouveau_prix_ttc) : null,\n        ecart_prix: null,\n        message: `Article ${ref} déclaré (${qteDeclaree} unités) non trouvé dans les factures`\n      }\n    });\n    continue;\n  }\n\n  let hasAnomaly = false;\n\n  // 2. Écart de quantité\n  if (facture.quantite !== qteDeclaree) {\n    hasAnomaly = true;\n    resultats.push({\n      json: {\n        id_declaration: idDeclaration,\n        reference_article: ref,\n        type_anomalie: 'quantite_mismatch',\n        quantite_declaree: qteDeclaree,\n        quantite_facturee: facture.quantite,\n        prix_facture: facture.prix_unitaire,\n        prix_promo: promo ? parseFloat(promo.nouveau_prix_ttc) : null,\n        ecart_prix: null,\n        message: `Qté déclarée (${qteDeclaree}) ≠ facturée (${facture.quantite}) [match:\n${facture.method}]`\n      }\n    });\n  }\n\n  // 3. Écart de prix vs promo (tolérance 5€)\n  if (promo && facture.prix_unitaire !== null) {\n    const prixPromo = parseFloat(promo.nouveau_prix_ttc) || 0;\n    const prixFacture = parseFloat(facture.prix_unitaire) || 0;\n    const ecart = Math.abs(prixFacture - prixPromo);\n\n    if (ecart > TOLERANCE_PRIX) {\n      hasAnomaly = true;\n      resultats.push({\n        json: {\n          id_declaration: idDeclaration,\n          reference_article: ref,\n          type_anomalie: 'prix_mismatch',\n          quantite_declaree: qteDeclaree,\n          quantite_facturee: facture.quantite,\n          prix_facture: prixFacture,\n          prix_promo: prixPromo,\n          ecart_prix: parseFloat(ecart.toFixed(2)),\n          message: `Prix facture (${prixFacture}€) ≠ promo (${prixPromo}€), écart\n${ecart.toFixed(2)}€`\n        }\n      });\n    }\n  }\n\n  // 4. Si aucune anomalie → ligne OK\n  if (!hasAnomaly) {\n    const prixFacture = facture.prix_unitaire ? parseFloat(facture.prix_unitaire) : null;\n    const prixPromo = promo ? parseFloat(promo.nouveau_prix_ttc) : null;\n\n    resultats.push({\n      json: {\n        id_declaration: idDeclaration,\n        reference_article: ref,\n        type_anomalie: 'ok',\n        quantite_declaree: qteDeclaree,\n        quantite_facturee: facture.quantite,\n        prix_facture: prixFacture,\n        prix_promo: prixPromo,\n        ecart_prix: prixFacture && prixPromo ? parseFloat(Math.abs(prixFacture -\nprixPromo).toFixed(2)) : null,\n        message: `Article ${ref} vérifié OK [match: ${facture.method}]`\n      }\n    });\n  }\n}\n\nreturn resultats;"
+      },
+      "id": "1acc38d9-d419-4cd6-a2b5-2a4b88429472",
+      "name": "Verify Anomalies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1456,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "has-anomalies",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "55ae6dc7-4be6-43ea-9e9e-04a8e630e6e0",
+      "name": "Has Anomalies?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "verifications_anomalies",
+        "columns": {
+          "0": "i",
+          "1": "d",
+          "2": "_",
+          "3": "d",
+          "4": "e",
+          "5": "c",
+          "6": "l",
+          "7": "a",
+          "8": "r",
+          "9": "a",
+          "10": "t",
+          "11": "i",
+          "12": "o",
+          "13": "n",
+          "14": ",",
+          "15": "r",
+          "16": "e",
+          "17": "f",
+          "18": "e",
+          "19": "r",
+          "20": "e",
+          "21": "n",
+          "22": "c",
+          "23": "e",
+          "24": "_",
+          "25": "a",
+          "26": "r",
+          "27": "t",
+          "28": "i",
+          "29": "c",
+          "30": "l",
+          "31": "e",
+          "32": ",",
+          "33": "t",
+          "34": "y",
+          "35": "p",
+          "36": "e",
+          "37": "_",
+          "38": "a",
+          "39": "n",
+          "40": "o",
+          "41": "m",
+          "42": "a",
+          "43": "l",
+          "44": "i",
+          "45": "e",
+          "46": ",",
+          "47": "q",
+          "48": "u",
+          "49": "a",
+          "50": "n",
+          "51": "t",
+          "52": "i",
+          "53": "t",
+          "54": "e",
+          "55": "_",
+          "56": "d",
+          "57": "e",
+          "58": "c",
+          "59": "l",
+          "60": "a",
+          "61": "r",
+          "62": "e",
+          "63": "e",
+          "64": ",",
+          "65": "q",
+          "66": "u",
+          "67": "a",
+          "68": "n",
+          "69": "t",
+          "70": "i",
+          "71": "t",
+          "72": "e",
+          "73": "_",
+          "74": "f",
+          "75": "a",
+          "76": "c",
+          "77": "t",
+          "78": "u",
+          "79": "r",
+          "80": "e",
+          "81": "e",
+          "82": ",",
+          "83": "p",
+          "84": "r",
+          "85": "i",
+          "86": "x",
+          "87": "_",
+          "88": "f",
+          "89": "a",
+          "90": "c",
+          "91": "t",
+          "92": "u",
+          "93": "r",
+          "94": "e",
+          "95": ",",
+          "96": "p",
+          "97": "r",
+          "98": "i",
+          "99": "x",
+          "100": "_",
+          "101": "p",
+          "102": "r",
+          "103": "o",
+          "104": "m",
+          "105": "o",
+          "106": ",",
+          "107": "e",
+          "108": "c",
+          "109": "a",
+          "110": "r",
+          "111": "t",
+          "112": "_",
+          "113": "p",
+          "114": "r",
+          "115": "i",
+          "116": "x",
+          "117": ",",
+          "118": "m",
+          "119": "e",
+          "120": "s",
+          "121": "s",
+          "122": "a",
+          "123": "g",
+          "124": "e",
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "resolved": false,
+            "id": 0,
+            "id_declaration": 0,
+            "quantite_declaree": 0,
+            "quantite_facturee": 0,
+            "prix_declare": 0,
+            "prix_facture": 0,
+            "prix_promo": 0,
+            "ecart_prix": 0
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "id_declaration",
+              "displayName": "id_declaration",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "reference_article",
+              "displayName": "reference_article",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "type_anomalie",
+              "displayName": "type_anomalie",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "quantite_declaree",
+              "displayName": "quantite_declaree",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "quantite_facturee",
+              "displayName": "quantite_facturee",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "prix_declare",
+              "displayName": "prix_declare",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "prix_facture",
+              "displayName": "prix_facture",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "prix_promo",
+              "displayName": "prix_promo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ecart_prix",
+              "displayName": "ecart_prix",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "resolved",
+              "displayName": "resolved",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "resolved_at",
+              "displayName": "resolved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "resolved_by",
+              "displayName": "resolved_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "911c167a-1956-4e33-ab61-cf3773ef0a20",
+      "name": "INSERT Anomalies",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1888,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dISm0QOG03jvqYLL",
+          "name": "DB externe"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "ec6d08cf-52c0-43a7-a1b0-db29fcdebdfd",
+      "name": "No Anomalies - Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1888,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "f4c3de1e-937c-4fbd-acdd-ea29aca88aa5",
+      "name": "No Declarations",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -2416,
+        304
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -3104,
+        208
+      ],
+      "id": "74efb0b3-416a-407d-9470-99a5d10e9981",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "const seen = new Set();\nconst unique = [];\n\nfor (const item of $input.all()) {\n  const key = item.json.id_invoice;\n  if (!seen.has(key)) {\n    seen.add(key);\n    unique.push(item);\n  }\n}\n\nreturn unique;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1072,
+        112
+      ],
+      "id": "f1c763e1-8ec5-4d69-95b5-620743a983ce",
+      "name": "Remove Duplicates"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prompt = `Tu es un expert en comptabilité française. Extrais les informations de cette facture et retourne UNIQUEMENT un JSON valide, sans markdown, sans explication, sans texte avant ou après le JSON.\n                                                                                                                                                                                                                                                                                                                   \n  === RÈGLES GÉNÉRALES ===\n  - Tous les montants utilisent le POINT comme séparateur décimal (ex: 1 129,00 → 1129.00)\n  - Les espaces dans les nombres sont des séparateurs de milliers à ignorer\n  - quantite peut être négative (avoir, remise, retour)\n  - Si le document est un AVOIR, traiter comme une facture avec des montants négatifs\n\n  === IDENTIFICATION DU DOCUMENT ===\n  - numero_facture : chercher après \"Facture n°\", \"FACTURE n°\", \"N° facture\", \"#FA\", \"FA-\". Si avoir : chercher après \"Avoir\", \"AV-\". Une date n'est JAMAIS un numéro de facture.\n  - date_facture : date d'ÉMISSION au format YYYY-MM-DD (ex: 05/01/2026 → 2026-01-05)\n\n  === ARTICLES ===\n  Pour chaque ligne produit (IGNORER les lignes de sous-total, total, TVA, frais de port) :\n\n  - ean : UNIQUEMENT une suite de EXACTEMENT 13 chiffres consécutifs sans aucune lettre. null si absent ou invalide.\n  - numero_serie : suite alphanumérique longue (10-20 caractères). Chercher après \"N/S :\", \"N°SERIE:\", \"SN:\", \"S/N:\". null si absent.\n  - reference : code ou référence interne du vendeur. null si absent.\n  - designation : nom COMPLET du produit tel qu'affiché, SANS le numéro de série.\n  - quantite : nombre d'unités. Négatif pour les avoirs/retours.\n  - prix_unitaire_ttc : prix TTC d'UN article. Calculer depuis HT×1.20 si seul HT disponible.\n\n  IGNORER : Remises, frais de port, garanties, lignes quantité = 0\n\n  === STRUCTURE JSON ===\n  {\"numero_facture\":\"\",\"date_facture\":\"YYYY-MM-DD\",\"total_ttc\":0.00,\"lignes\":[{\"ean\":null,\"numero_serie\":null,\"reference\":null,\"designation\":\"\",\"quantite\":1,\"prix_unitaire_ttc\":0.00}]}`;\n\n  // Traiter TOUS les items\n  const results = [];\n\n  for (const item of $input.all()) {\n    results.push({\n      json: {\n        ...item.json,\n        mistral_body: {\n          model: \"mistral-large-latest\",\n          messages: [\n            {\n              role: \"user\",\n              content: [\n                { type: \"text\", text: prompt },\n                { type: \"document_url\", document_url: item.json.presigned_url }\n              ]\n            }\n          ],\n          response_format: { type: \"json_object\" }\n        }\n      }\n    });\n  }\n\n  return results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -816,
+        112
+      ],
+      "id": "bdf9f011-4090-416e-80ca-a9b14cbdcc95",
+      "name": "Prepare Mistral Request"
+    },
+    {
+      "parameters": {
+        "url": "=https://dev-prestashop-2224c0698cb3.prestashop.sh/index.php?fc=module&module=snt_dji_compensation&controller=api&action=update-status&id_declaration={{ $json.id_declaration }}&status=processing",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "admin_notes",
+              "value": "=Analyse automatique le {{ $now.format('dd/MM/yyyy HH:mm') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2144,
+        96
+      ],
+      "id": "5cdbc595-8b8a-4fd0-a0e7-217954366e7f",
+      "name": "Change PS declaration status",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "RcQ2z2vXydxGQuhz",
+          "name": "API Key Presta Module"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "GET Declarations to Process": {
+      "main": [
+        [
+          {
+            "node": "Has Declarations?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Declarations?": {
+      "main": [
+        [
+          {
+            "node": "Split Declarations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Declarations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Declarations": {
+      "main": [
+        [
+          {
+            "node": "GET Declaration XLSX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Declaration XLSX": {
+      "main": [
+        [
+          {
+            "node": "Transform Declaration Lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Declaration Lines": {
+      "main": [
+        [
+          {
+            "node": "INSERT Declaration Lignes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "INSERT Declaration Lignes": {
+      "main": [
+        [
+          {
+            "node": "GET Invoices URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Invoices URLs": {
+      "main": [
+        [
+          {
+            "node": "Split Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Invoices": {
+      "main": [
+        [
+          {
+            "node": "Remove Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mistral Analyse Facture": {
+      "main": [
+        [
+          {
+            "node": "Parse Mistral Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Mistral Response": {
+      "main": [
+        [
+          {
+            "node": "INSERT Facture Analysee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "INSERT Facture Analysee": {
+      "main": [
+        [
+          {
+            "node": "Prepare Facture Produits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Facture Produits": {
+      "main": [
+        [
+          {
+            "node": "INSERT Facture Produits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "INSERT Facture Produits": {
+      "main": [
+        [
+          {
+            "node": "GET Declaration Lignes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Declaration Lignes": {
+      "main": [
+        [
+          {
+            "node": "GET Factures Produits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Factures Produits": {
+      "main": [
+        [
+          {
+            "node": "GET Promotions DJI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Anomalies": {
+      "main": [
+        [
+          {
+            "node": "Has Anomalies?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Anomalies?": {
+      "main": [
+        [
+          {
+            "node": "INSERT Anomalies",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Anomalies - Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "GET Declarations to Process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Prepare Mistral Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Mistral Request": {
+      "main": [
+        [
+          {
+            "node": "Mistral Analyse Facture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Promotions DJI": {
+      "main": [
+        [
+          {
+            "node": "Verify Anomalies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "INSERT Anomalies": {
+      "main": [
+        [
+          {
+            "node": "Change PS declaration status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Anomalies - Done": {
+      "main": [
+        [
+          {
+            "node": "Change PS declaration status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "720fc12a-8cde-4d1f-9cda-f36e8ad1d4bd",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7ba3ab14852dbb702a48496a98bc933d084ef27980f5ff171a5b9db8c19b65fe"
+  },
+  "id": "NihD6tnNKHItgDoi",
+  "tags": [
+    {
+      "name": "DJI",
+      "id": "GV73xZzTnQCEBhHe",
+      "updatedAt": "2026-04-24T09:03:53.202Z",
+      "createdAt": "2026-04-24T09:03:53.202Z"
+    },
+    {
+      "name": "Compensation",
+      "id": "OcR15peJQDh8bpvX",
+      "updatedAt": "2026-04-24T09:03:53.156Z",
+      "createdAt": "2026-04-24T09:03:53.156Z"
+    }
+  ]
+}

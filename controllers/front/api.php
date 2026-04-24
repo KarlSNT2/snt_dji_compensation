@@ -61,6 +61,18 @@ class Snt_dji_compensationApiModuleFrontController extends ModuleFrontController
             case 'template':
                 $this->getTemplate();
                 break;
+            case 'declarations-to-process':
+                $this->getDeclarationsToProcess();
+                break;
+            case 'declaration-xlsx':
+                $this->getDeclarationXlsx();
+                break;
+            case 'invoices-urls':
+                $this->getInvoicesUrls();
+                break;
+            case 'update-status':
+                $this->updateDeclarationStatus();
+                break;
             default:
                 $this->jsonResponse(['error' => 'Not Found', 'message' => 'Unknown action'], 404);
         }
@@ -345,6 +357,275 @@ class Snt_dji_compensationApiModuleFrontController extends ModuleFrontController
                 'message' => 'Erreur lors de la lecture du fichier: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Retourne les declarations a traiter (status=submitted)
+     */
+    protected function getDeclarationsToProcess()
+    {
+        $limit = (int) Tools::getValue('limit', 50);
+        $offset = (int) Tools::getValue('offset', 0);
+
+        $sql = new DbQuery();
+        $sql->select('d.*, c.firstname, c.lastname, c.email, c.company');
+        $sql->from('dji_compensation_declaration', 'd');
+        $sql->leftJoin('customer', 'c', 'c.id_customer = d.id_customer');
+        $sql->where('d.status = "submitted"');
+        $sql->orderBy('d.date_add ASC');
+        $sql->limit($limit, $offset);
+
+        $declarations = Db::getInstance()->executeS($sql);
+
+        foreach ($declarations as &$decl) {
+            $decl['id_declaration'] = (int) $decl['id_declaration'];
+            $decl['id_customer'] = (int) $decl['id_customer'];
+            $decl['has_mic_power_products'] = (bool) $decl['has_mic_power_products'];
+            $decl['invoices_count'] = (int) DJICompensationInvoice::countByDeclaration($decl['id_declaration']);
+            $decl['stock_proofs_count'] = (int) DJICompensationStockProof::countByDeclaration($decl['id_declaration']);
+        }
+
+        $total = DJICompensationDeclaration::countAll('submitted');
+
+        $this->jsonResponse([
+            'success' => true,
+            'total' => $total,
+            'count' => count($declarations),
+            'offset' => $offset,
+            'declarations' => $declarations,
+        ]);
+    }
+
+    /**
+     * Retourne le contenu parse du XLSX d'une declaration (lignes declarees uniquement)
+     */
+    protected function getDeclarationXlsx()
+    {
+        $idDeclaration = (int) Tools::getValue('id_declaration');
+
+        if (!$idDeclaration) {
+            $this->jsonResponse(['error' => 'Bad Request', 'message' => 'id_declaration is required'], 400);
+            return;
+        }
+
+        $declaration = new DJICompensationDeclaration($idDeclaration);
+        if (!Validate::isLoadedObject($declaration)) {
+            $this->jsonResponse(['error' => 'Not Found', 'message' => 'Declaration not found'], 404);
+            return;
+        }
+
+        if (empty($declaration->xlsx_s3_key)) {
+            $this->jsonResponse(['error' => 'Not Found', 'message' => 'No XLSX file for this declaration'], 404);
+            return;
+        }
+
+        try {
+            require_once _PS_MODULE_DIR_ . 'snt_dji_compensation/classes/DJICompensationS3Service.php';
+            require_once _PS_MODULE_DIR_ . 'snt_dji_compensation/classes/DJICompensationXlsxReader.php';
+
+            $s3 = new DJICompensationS3Service();
+            $xlsxContent = $s3->get($declaration->xlsx_s3_key);
+
+            if ($xlsxContent === false) {
+                $this->jsonResponse(['error' => 'Error', 'message' => 'Unable to download XLSX from S3'], 500);
+                return;
+            }
+
+            $tempFile = tempnam(sys_get_temp_dir(), 'dji_xlsx_');
+            file_put_contents($tempFile, $xlsxContent);
+
+            $reader = new DJICompensationXlsxReader($tempFile);
+            $result = $reader->readSheet(1, 1);
+
+            unlink($tempFile);
+
+            $declaredLines = [];
+            $qtyColumnName = 'Quantités déclarées pour compensation';
+
+            foreach ($result['data'] as $row) {
+                $qty = isset($row[$qtyColumnName]) ? trim($row[$qtyColumnName]) : '';
+                if ($qty !== '' && $qty !== null && $qty != 0) {
+                    $declaredLines[] = [
+                        'reference_article' => $row['Référence produit - STS'] ?? null,
+                        'produit' => $row['Produit'] ?? null,
+                        'ean' => $row['EAN Produit'] ?? null,
+                        'quantite_declaree' => (int) $qty,
+                        'prix_vente_ttc' => $this->parseNumber($row['Prix de vente TTC'] ?? null),
+                        'prix_promo_ttc' => $this->parseNumber($row['Prix Promo TTC'] ?? null),
+                        'compensation_ht' => $this->parseNumber($row['Compensation €HT'] ?? null),
+                        'montant_avoir' => $this->parseNumber($row['Montant de l\'avoir à recevoir '] ?? null),
+                        'date_debut' => $this->excelDateToISO($row['Date de début'] ?? null),
+                        'date_fin' => $this->excelDateToISO($row['Date de fin'] ?? null),
+                        'date_butoir' => $this->excelDateToISO($row['Date butoir de déclaration'] ?? null),
+                        'numero_serie' => $row['Numéro de série produit (SN)
+Gammes : Mic & Power '] ?? null,
+                        'reference_avoir' => $row['Référence AVOIR revendeur
+(si attendu)'] ?? null,
+                    ];
+                }
+            }
+
+            $this->jsonResponse([
+                'success' => true,
+                'id_declaration' => $idDeclaration,
+                'id_customer' => (int) $declaration->id_customer,
+                'reference' => $declaration->reference,
+                'total_rows' => $result['total_rows'],
+                'declared_lines_count' => count($declaredLines),
+                'declared_lines' => $declaredLines,
+            ]);
+        } catch (Exception $e) {
+            $this->jsonResponse([
+                'error' => 'Error',
+                'message' => 'Error parsing XLSX: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Retourne les URLs S3 pre-signees pour les factures d'une declaration
+     */
+    protected function getInvoicesUrls()
+    {
+        $idDeclaration = (int) Tools::getValue('id_declaration');
+        $expiresIn = (int) Tools::getValue('expires_in', 3600);
+
+        if (!$idDeclaration) {
+            $this->jsonResponse(['error' => 'Bad Request', 'message' => 'id_declaration is required'], 400);
+            return;
+        }
+
+        $declaration = new DJICompensationDeclaration($idDeclaration);
+        if (!Validate::isLoadedObject($declaration)) {
+            $this->jsonResponse(['error' => 'Not Found', 'message' => 'Declaration not found'], 404);
+            return;
+        }
+
+        $invoices = DJICompensationInvoice::getByDeclaration($idDeclaration);
+
+        if (empty($invoices)) {
+            $this->jsonResponse([
+                'success' => true,
+                'id_declaration' => $idDeclaration,
+                'invoices' => [],
+            ]);
+            return;
+        }
+
+        try {
+            require_once _PS_MODULE_DIR_ . 'snt_dji_compensation/classes/DJICompensationS3Service.php';
+            $s3 = new DJICompensationS3Service();
+
+            $result = [];
+            foreach ($invoices as $invoice) {
+                $result[] = [
+                    'id_invoice' => (int) $invoice['id_invoice'],
+                    'original_filename' => $invoice['original_filename'],
+                    's3_key' => $invoice['s3_key'],
+                    'file_size' => (int) $invoice['file_size'],
+                    'presigned_url' => $s3->getPresignedUrl($invoice['s3_key'], $expiresIn),
+                    'expires_in' => $expiresIn,
+                ];
+            }
+
+            $this->jsonResponse([
+                'success' => true,
+                'id_declaration' => $idDeclaration,
+                'id_customer' => (int) $declaration->id_customer,
+                'reference' => $declaration->reference,
+                'invoices_count' => count($result),
+                'invoices' => $result,
+            ]);
+        } catch (Exception $e) {
+            $this->jsonResponse([
+                'error' => 'Error',
+                'message' => 'Error generating presigned URLs: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Met a jour le statut d'une declaration
+     */
+    protected function updateDeclarationStatus()
+    {
+        $idDeclaration = (int) Tools::getValue('id_declaration');
+        $newStatus = Tools::getValue('status');
+        $adminNotes = Tools::getValue('admin_notes', '');
+
+        if (!$idDeclaration) {
+            $this->jsonResponse(['error' => 'Bad Request', 'message' => 'id_declaration is required'], 400);
+            return;
+        }
+
+        $validStatuses = array_keys(DJICompensationDeclaration::getStatuses());
+        if (!in_array($newStatus, $validStatuses)) {
+            $this->jsonResponse([
+                'error' => 'Bad Request',
+                'message' => 'Invalid status. Valid: ' . implode(', ', $validStatuses)
+            ], 400);
+            return;
+        }
+
+        $declaration = new DJICompensationDeclaration($idDeclaration);
+        if (!Validate::isLoadedObject($declaration)) {
+            $this->jsonResponse(['error' => 'Not Found', 'message' => 'Declaration not found'], 404);
+            return;
+        }
+
+        $oldStatus = $declaration->status;
+        $declaration->status = $newStatus;
+
+        if (!empty($adminNotes)) {
+            $declaration->admin_notes = $adminNotes;
+        }
+
+        try {
+            if ($declaration->save()) {
+                $this->jsonResponse([
+                    'success' => true,
+                    'id_declaration' => $idDeclaration,
+                    'old_status' => $oldStatus,
+                    'new_status' => $newStatus,
+                    'message' => 'Status updated successfully'
+                ]);
+            } else {
+                $this->jsonResponse([
+                    'error' => 'Error',
+                    'message' => 'Failed to update declaration'
+                ], 500);
+            }
+        } catch (Exception $e) {
+            $this->jsonResponse([
+                'error' => 'Error',
+                'message' => 'Exception: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Convertit une date Excel en format ISO
+     */
+    private function excelDateToISO($excelDate)
+    {
+        if (!$excelDate || !is_numeric($excelDate)) {
+            return null;
+        }
+        $date = new DateTime();
+        $date->setTimestamp(($excelDate - 25569) * 86400);
+        return $date->format('Y-m-d');
+    }
+
+    /**
+     * Parse un nombre depuis une valeur XLSX
+     */
+    private function parseNumber($value)
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        $num = floatval(str_replace([',', ' '], ['.', ''], $value));
+        return $num;
     }
 
     /**

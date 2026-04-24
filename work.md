@@ -277,16 +277,392 @@ UNIQUE (reference_article, date_debut, date_fin);
 
 ---
 
-## TODO - A reprendre demain
+## TODO - Workflow Promotions (DONE)
 
-1. [ ] Modifier la contrainte UNIQUE de la table `promotions_dji`
-2. [ ] Choisir la strategie : 
-   - **Option A** : UPSERT avec contrainte sur (reference_article, date_debut, date_fin)
-   - **Option B** : TRUNCATE + INSERT (recommande pour sync quotidienne)
-3. [ ] Finaliser le noeud Postgres dans n8n
-4. [ ] Configurer le Schedule Trigger (tous les jours a 6h par exemple)
-5. [ ] Tester le workflow complet
-6. [ ] Corriger le header "Statut" dans le fichier XLSX (actuellement "AR0063215")
+- [x] Contrainte UNIQUE retirée
+- [x] Header "Statut" corrigé
+- [x] TRUNCATE + INSERT quotidien configuré
+
+---
+
+## 24 avril 2026 - Workflow Analyse des Déclarations (DONE)
+
+### Objectif
+
+Analyser automatiquement les déclarations clients :
+1. Parser le XLSX client pour extraire les lignes déclarées
+2. Analyser les factures PDF via Mistral API (OCR)
+3. Vérifier la cohérence : quantités déclarées vs quantités facturées vs prix promotions
+4. Mettre à jour le statut de la déclaration dans PrestaShop
+
+### Endpoints API ajoutés
+
+| Endpoint | Méthode | Description |
+|----------|---------|-------------|
+| `/api/dji-compensation/declarations-to-process` | GET | Déclarations status=submitted à traiter |
+| `/api/dji-compensation/declaration-xlsx?id_declaration=X` | GET | Lignes déclarées du XLSX client |
+| `/api/dji-compensation/invoices-urls?id_declaration=X` | GET | URLs S3 pré-signées des factures PDF |
+| `/api/dji-compensation/update-status` | GET/POST | Mettre à jour le statut d'une déclaration |
+
+### Tables PostgreSQL
+
+Script complet : `scripts-sql/create_analyse_tables.sql`
+
+Tables créées :
+- `declaration_lignes` - Lignes déclarées parsées du XLSX client
+- `factures_analysees` - Métadonnées des factures analysées par Mistral
+- `factures_produits` - Produits extraits des factures (OCR)
+- `verifications_anomalies` - Résultats de vérification (OK ou anomalie)
+
+Types d'anomalies :
+- `ok` - Ligne vérifiée sans problème
+- `article_non_facture` - Article déclaré non trouvé dans les factures
+- `quantite_mismatch` - Écart entre quantité déclarée et facturée
+- `prix_mismatch` - Écart de prix > 5€ vs promotion
+
+### Workflow n8n - Architecture finale
+
+```
+[Schedule Trigger]
+        |
+        v
+[HTTP] GET /declarations-to-process
+        |
+        v
+[Split] Pour chaque déclaration
+        |
+        v
+[HTTP] GET /declaration-xlsx ──────────────────────────────────┐
+        |                                                       |
+        v                                                       |
+[Code] Transform Declaration Lines                             |
+        |                                                       |
+        v                                                       |
+[Postgres] INSERT declaration_lignes                           |
+        |                                                       |
+        v                                                       |
+[HTTP] GET /invoices-urls                                      |
+        |                                                       |
+        v                                                       |
+[Code] Remove Duplicates + Prepare Mistral                     |
+        |                                                       |
+        v                                                       |
+[HTTP] POST Mistral API (avec délai 2s entre chaque)           |
+        |                                                       |
+        v                                                       |
+[Code] Parse Mistral Response                                  |
+        |                                                       |
+        v                                                       |
+[Postgres] INSERT factures_analysees (return id)               |
+        |                                                       |
+        v                                                       |
+[Code] Prepare Facture Produits                                |
+        |                                                       |
+        v                                                       |
+[Postgres] INSERT factures_produits                            |
+        |                                                       |
+        v                                                       |
+[Postgres] GET Declaration Lignes (Execute Once)               |
+        |                                                       |
+        v                                                       |
+[Postgres] GET Factures Produits (Execute Once)                |
+        |                                                       |
+        v                                                       |
+[Postgres] GET Promotions DJI (Execute Once)                   |
+        |                                                       |
+        v                                                       |
+[Code] Verify Anomalies (match EAN > Ref > Designation)        |
+        |                                                       |
+        v                                                       |
+[Postgres] INSERT verifications_anomalies                      |
+        |                                                       |
+        v                                                       |
+[Code] Determine Status                                        |
+        |                                                       |
+        v                                                       |
+[HTTP] GET /update-status?id_declaration=X&status=Y ───────────┘
+```
+
+### Code Node - Prepare Mistral Request
+
+```javascript
+const prompt = `Tu es un expert en comptabilité française. Extrais les informations de cette facture et retourne UNIQUEMENT un JSON valide, sans markdown, sans explication, sans texte avant ou après le JSON.
+
+=== RÈGLES GÉNÉRALES ===
+- Tous les montants utilisent le POINT comme séparateur décimal (ex: 1 129,00 → 1129.00)
+- Les espaces dans les nombres sont des séparateurs de milliers à ignorer
+- quantite peut être négative (avoir, remise, retour)
+- Si le document est un AVOIR, traiter comme une facture avec des montants négatifs
+
+=== IDENTIFICATION DU DOCUMENT ===
+- numero_facture : chercher après "Facture n°", "FACTURE n°", "N° facture", "#FA", "FA-". Si avoir : chercher après "Avoir", "AV-". Une date n'est JAMAIS un numéro de facture.
+- date_facture : date d'ÉMISSION au format YYYY-MM-DD (ex: 05/01/2026 → 2026-01-05)
+
+=== ARTICLES ===
+Pour chaque ligne produit (IGNORER les lignes de sous-total, total, TVA, frais de port) :
+
+- ean : UNIQUEMENT une suite de EXACTEMENT 13 chiffres consécutifs sans aucune lettre. null si absent ou invalide.
+- numero_serie : suite alphanumérique longue (10-20 caractères). Chercher après "N/S :", "N°SERIE:", "SN:", "S/N:". null si absent.
+- reference : code ou référence interne du vendeur. null si absent.
+- designation : nom COMPLET du produit tel qu'affiché, SANS le numéro de série.
+- quantite : nombre d'unités. Négatif pour les avoirs/retours.
+- prix_unitaire_ttc : prix TTC d'UN article. Calculer depuis HT×1.20 si seul HT disponible.
+
+IGNORER : Remises, frais de port, garanties, lignes quantité = 0
+
+=== STRUCTURE JSON ===
+{"numero_facture":"","date_facture":"YYYY-MM-DD","total_ttc":0.00,"lignes":[{"ean":null,"numero_serie":null,"reference":null,"designation":"","quantite":1,"prix_unitaire_ttc":0.00}]}`;
+
+const results = [];
+for (const item of $input.all()) {
+  results.push({
+    json: {
+      ...item.json,
+      mistral_body: {
+        model: "mistral-large-latest",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "document_url", document_url: item.json.presigned_url }
+            ]
+          }
+        ],
+        response_format: { type: "json_object" }
+      }
+    }
+  });
+}
+return results;
+```
+
+### Code Node - Verify Anomalies (complet)
+
+```javascript
+const TOLERANCE_PRIX = 5.00;
+
+const declarationLignes = $('GET Declaration Lignes').all();
+const facturesProduits = $('GET Factures Produits').all();
+const promotions = $('GET Promotions DJI').all();
+const idDeclaration = $('GET Declaration XLSX').first().json.id_declaration;
+
+const resultats = [];
+
+// Index des produits facturés
+const factures = facturesProduits.map(p => p.json);
+
+// Index des promotions par EAN et par référence
+const promosByEan = {};
+const promosByRef = {};
+const promosByName = [];
+
+for (const promo of promotions) {
+  const p = promo.json;
+  if (p.ean) promosByEan[p.ean.trim()] = p;
+  if (p.reference_article) promosByRef[p.reference_article.toUpperCase().trim()] = p;
+  promosByName.push({
+    name: (p.produit || '').toUpperCase(),
+    promo: p
+  });
+}
+
+// Fonction de match partiel (au moins 2 mots en commun)
+function matchPartiel(designation, promosName) {
+  const words = designation.toUpperCase().replace(/[^A-Z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const item of promosName) {
+    const promoWords = item.name.replace(/[^A-Z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+    const common = words.filter(w => promoWords.some(pw => pw.includes(w) || w.includes(pw)));
+    const score = common.length;
+
+    if (score >= 2 && score > bestScore) {
+      bestScore = score;
+      bestMatch = item.promo;
+    }
+  }
+  return bestMatch;
+}
+
+// Fonction pour trouver une promo : EAN > Référence > Nom partiel
+function findPromo(ligne) {
+  if (ligne.ean && promosByEan[ligne.ean.trim()]) {
+    return { promo: promosByEan[ligne.ean.trim()], method: 'ean' };
+  }
+  const ref = (ligne.reference_article || ligne.reference || '').toUpperCase().trim();
+  if (ref && promosByRef[ref]) {
+    return { promo: promosByRef[ref], method: 'reference' };
+  }
+  const designation = ligne.designation || ligne.produit || '';
+  if (designation) {
+    const match = matchPartiel(designation, promosByName);
+    if (match) {
+      return { promo: match, method: 'designation_partielle' };
+    }
+  }
+  return null;
+}
+
+// Agréger les quantités facturées par produit
+const factureAggregated = {};
+for (const f of factures) {
+  if (f.quantite <= 0 || f.prix_unitaire_ttc < 0) continue;
+  const match = findPromo(f);
+  if (match) {
+    const key = match.promo.reference_article.toUpperCase().trim();
+    if (!factureAggregated[key]) {
+      factureAggregated[key] = {
+        quantite: 0,
+        prix_unitaire: parseFloat(f.prix_unitaire_ttc) || 0,
+        promo: match.promo,
+        method: match.method
+      };
+    }
+    factureAggregated[key].quantite += f.quantite;
+  }
+}
+
+// Vérifier chaque ligne déclarée
+for (const ligne of declarationLignes) {
+  const l = ligne.json;
+  const ref = (l.reference_article || '').toUpperCase().trim();
+  if (!ref) continue;
+
+  const qteDeclaree = l.quantite_declaree || 0;
+  const facture = factureAggregated[ref];
+  const promo = promosByRef[ref];
+
+  // 1. Article non trouvé dans les factures
+  if (!facture) {
+    resultats.push({
+      json: {
+        id_declaration: idDeclaration,
+        reference_article: ref,
+        type_anomalie: 'article_non_facture',
+        quantite_declaree: qteDeclaree,
+        quantite_facturee: 0,
+        prix_facture: null,
+        prix_promo: promo ? parseFloat(promo.nouveau_prix_ttc) : null,
+        ecart_prix: null,
+        message: `Article ${ref} déclaré (${qteDeclaree} unités) non trouvé dans les factures`
+      }
+    });
+    continue;
+  }
+
+  let hasAnomaly = false;
+
+  // 2. Écart de quantité
+  if (facture.quantite !== qteDeclaree) {
+    hasAnomaly = true;
+    resultats.push({
+      json: {
+        id_declaration: idDeclaration,
+        reference_article: ref,
+        type_anomalie: 'quantite_mismatch',
+        quantite_declaree: qteDeclaree,
+        quantite_facturee: facture.quantite,
+        prix_facture: facture.prix_unitaire,
+        prix_promo: promo ? parseFloat(promo.nouveau_prix_ttc) : null,
+        ecart_prix: null,
+        message: `Qté déclarée (${qteDeclaree}) ≠ facturée (${facture.quantite}) [match: ${facture.method}]`
+      }
+    });
+  }
+
+  // 3. Écart de prix (tolérance 5€)
+  if (promo && facture.prix_unitaire !== null) {
+    const prixPromo = parseFloat(promo.nouveau_prix_ttc) || 0;
+    const prixFacture = parseFloat(facture.prix_unitaire) || 0;
+    const ecart = Math.abs(prixFacture - prixPromo);
+
+    if (ecart > TOLERANCE_PRIX) {
+      hasAnomaly = true;
+      resultats.push({
+        json: {
+          id_declaration: idDeclaration,
+          reference_article: ref,
+          type_anomalie: 'prix_mismatch',
+          quantite_declaree: qteDeclaree,
+          quantite_facturee: facture.quantite,
+          prix_facture: prixFacture,
+          prix_promo: prixPromo,
+          ecart_prix: parseFloat(ecart.toFixed(2)),
+          message: `Prix facture (${prixFacture}€) ≠ promo (${prixPromo}€), écart ${ecart.toFixed(2)}€`
+        }
+      });
+    }
+  }
+
+  // 4. Ligne OK
+  if (!hasAnomaly) {
+    const prixFacture = facture.prix_unitaire ? parseFloat(facture.prix_unitaire) : null;
+    const prixPromo = promo ? parseFloat(promo.nouveau_prix_ttc) : null;
+    
+    resultats.push({
+      json: {
+        id_declaration: idDeclaration,
+        reference_article: ref,
+        type_anomalie: 'ok',
+        quantite_declaree: qteDeclaree,
+        quantite_facturee: facture.quantite,
+        prix_facture: prixFacture,
+        prix_promo: prixPromo,
+        ecart_prix: prixFacture && prixPromo ? parseFloat(Math.abs(prixFacture - prixPromo).toFixed(2)) : null,
+        message: `Article ${ref} vérifié OK [match: ${facture.method}]`
+      }
+    });
+  }
+}
+
+return resultats;
+```
+
+### Code Node - Determine Status
+
+```javascript
+const resultats = $('Verify Anomalies').all();
+const idDeclaration = $('GET Declaration XLSX').first().json.id_declaration;
+
+const hasAnomalies = resultats.some(r => r.json.type_anomalie !== 'ok');
+const nbAnomalies = resultats.filter(r => r.json.type_anomalie !== 'ok').length;
+const nbOk = resultats.filter(r => r.json.type_anomalie === 'ok').length;
+
+return [{
+  json: {
+    id_declaration: idDeclaration,
+    status: hasAnomalies ? 'processing' : 'validated',
+    admin_notes: hasAnomalies 
+      ? `${nbAnomalies} anomalie(s) détectée(s) sur ${resultats.length} lignes`
+      : `Validé automatiquement - ${nbOk} lignes vérifiées OK`
+  }
+}];
+```
+
+### Configuration importante
+
+- **Mistral API** : Ajouter un délai de 2 secondes entre chaque appel (rate limiting)
+- **Nodes Postgres GET** : Activer "Execute Once" pour éviter la multiplication des résultats
+- **Tolérance prix** : 5€ (configurable dans le code)
+
+### Requête de reset pour tests
+
+```sql
+TRUNCATE TABLE 
+  verifications_anomalies,
+  factures_produits,
+  factures_analysees,
+  declaration_lignes
+RESTART IDENTITY CASCADE;
+```
+
+### TODO - Améliorations futures
+
+- [ ] Ajouter notification Slack/Email en cas d'anomalies
+- [ ] Table d'association client → charte de nommage produit
+- [ ] Dashboard de suivi des analyses
 
 ---
 
@@ -300,7 +676,7 @@ snt_dji_compensation/
 │   └── DJICompensationXlsxReader.php     (cree)
 ├── controllers/
 │   └── front/
-│       ├── api.php                        (cree)
+│       ├── api.php                        (modifie - endpoints analyse)
 │       └── declaration.php                (modifie)
 ├── mails/
 │   ├── index.php                          (cree)
@@ -308,6 +684,10 @@ snt_dji_compensation/
 │       ├── index.php                      (cree)
 │       ├── upload_error.html              (cree)
 │       └── upload_error.txt               (cree)
+├── scripts-sql/
+│   └── create_analyse_tables.sql          (cree)
+├── temp/
+│   └── workflow_analyse_declarations.json (cree - template n8n)
 ├── snt_dji_compensation.php               (modifie)
 └── Readme.md                              (modifie)
 ```

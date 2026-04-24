@@ -1,0 +1,355 @@
+{
+  "name": "[DONE] Insert Actual Promotions",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "db257ec7-f774-4085-b2ab-af3857f14ce9",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "7rJfkuzbesf3bwKo",
+          "mode": "id",
+          "cachedResultUrl": "/workflow/7rJfkuzbesf3bwKo"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "0a21718c-c9e4-413d-9216-a63731ad16cb",
+      "name": "TRUNCATE promotions_dji"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9fbf7957-00d2-48a0-aea3-da40cd24f83f",
+              "name": "token",
+              "value": "b6cae5823d3827937a476b345772446ad8ada4d79dc7557d4f41220501698935",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "3d733876-6074-4fa2-b31c-db3e9eed12d0",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "url": "https://dev-prestashop-2224c0698cb3.prestashop.sh/index.php?fc=module&module=snt_dji_compensation&controller=api&action=template&api_key=b6cae5823d3827937a476b345772446ad8ada4d79dc7557d4f41220501698935",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        624,
+        0
+      ],
+      "id": "3e3de09d-de18-43c5-a82a-43de31f2c337",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "RcQ2z2vXydxGQuhz",
+          "name": "API Key Presta Module"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function excelDateToISO(excelDate) {\n  if (!excelDate || isNaN(excelDate)) {\n    return null;\n  }\n  const date = new Date((excelDate - 25569) * 86400 * 1000);\n  return date.toISOString().split('T')[0];\n}\n\nfunction parseNumber(value) {\n  if (!value || value === '') {\n    return null;\n  }\n  const num = parseFloat(String(value).replace(',', '.').replace(/[^\\d.-]/g, ''));\n  return isNaN(num) ? null : num;\n}\n\nfunction cleanString(value) {\n  if (!value) return null;\n  const cleaned = String(value).trim();\n  return cleaned === '' ? null : cleaned;\n}\n\nconst inputData = $input.first().json;\nconst items = inputData.data;\n\nif (!items || !Array.isArray(items)) {\n  throw new Error('Pas de donnees trouvees');\n}\n\nconst result = [];\n\nfor (const row of items) {\n  const produit = cleanString(row['Produit']);\n  const reference = cleanString(row['Référence produit - STS']);\n\n  if (!produit || !reference) {\n    continue;\n  }\n\n  result.push({\n    json: {\n      statut: cleanString(row['Statut']),\n      type_promotion: cleanString(row['Type de promotion']),\n      produit: produit,\n      ean: cleanString(row['EAN Produit']),\n      reference_article: reference,\n      date_debut: excelDateToISO(row['Date de début']),\n      date_fin: excelDateToISO(row['Date de fin']),\n      prix_vente_ttc: parseNumber(row['Prix de vente TTC']),\n      nouveau_prix_ttc: parseNumber(row['Prix Promo TTC']),\n      difference: parseNumber(row['Baisse de prix']),\n      compensation_ht: parseNumber(row['Compensation €HT']),\n      date_butoir_declaration: excelDateToISO(row['Date butoir de déclaration']),\n      mise_a_jour: excelDateToISO(row['Mise à Jour']),\n      declaration_sts_dji: cleanString(row['Déclaration de STS à DJI'])\n    }\n  });\n}\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "5648059e-fe40-4152-9da9-b25b80079e1c",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "promotions_dji",
+          "mode": "list",
+          "cachedResultName": "promotions_dji"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "statut": "={{ $json.statut }}",
+            "type_promotion": "={{ $json.type_promotion }}",
+            "produit": "={{ $json.produit }}",
+            "ean": "={{ $json.ean }}",
+            "reference_article": "={{ $json.reference_article }}",
+            "date_debut": "={{ $json.date_debut }}",
+            "date_fin": "={{ $json.date_fin }}",
+            "prix_vente_ttc": "={{ $json.prix_vente_ttc }}",
+            "nouveau_prix_ttc": "={{ $json.nouveau_prix_ttc }}",
+            "difference": "={{ $json.difference }}",
+            "compensation_ht": "={{ $json.compensation_ht }}",
+            "date_butoir_declaration": "={{ $json.date_butoir_declaration }}",
+            "mise_a_jour": "={{ $json.mise_a_jour }}",
+            "declaration_sts_dji": "={{ $json.declaration_sts_dji }}",
+            "created_at": "={{ $now }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "statut",
+              "displayName": "statut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type_promotion",
+              "displayName": "type_promotion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "produit",
+              "displayName": "produit",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ean",
+              "displayName": "ean",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reference_article",
+              "displayName": "reference_article",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_debut",
+              "displayName": "date_debut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_fin",
+              "displayName": "date_fin",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prix_vente_ttc",
+              "displayName": "prix_vente_ttc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "nouveau_prix_ttc",
+              "displayName": "nouveau_prix_ttc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "difference",
+              "displayName": "difference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "compensation_ht",
+              "displayName": "compensation_ht",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_butoir_declaration",
+              "displayName": "date_butoir_declaration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "mise_a_jour",
+              "displayName": "mise_a_jour",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "declaration_sts_dji",
+              "displayName": "declaration_sts_dji",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "350a4a7d-d55d-4b59-8db7-f85591abc26f",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "dISm0QOG03jvqYLL",
+          "name": "DB externe"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "TRUNCATE promotions_dji",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TRUNCATE promotions_dji": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "8d635f25-12f7-43d9-b3b6-494a15674468",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7ba3ab14852dbb702a48496a98bc933d084ef27980f5ff171a5b9db8c19b65fe"
+  },
+  "id": "0FbP4aReE6AqmoHb",
+  "tags": []
+}
