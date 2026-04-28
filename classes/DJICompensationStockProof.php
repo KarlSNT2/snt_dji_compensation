@@ -123,6 +123,38 @@ class DJICompensationStockProof extends ObjectModel
     }
 
     /**
+     * Supprime une preuve de stock avec son fichier S3
+     */
+    public function deleteWithS3($s3Service)
+    {
+        if (!empty($this->s3_key)) {
+            $s3Service->delete($this->s3_key);
+        }
+
+        return $this->delete();
+    }
+
+    /**
+     * Recupere une preuve de stock par son ID et verifie l'appartenance a la declaration
+     */
+    public static function getByIdAndDeclaration($idStockProof, $idDeclaration)
+    {
+        $sql = new DbQuery();
+        $sql->select('id_stock_proof');
+        $sql->from(self::$definition['table']);
+        $sql->where('id_stock_proof = ' . (int) $idStockProof);
+        $sql->where('id_declaration = ' . (int) $idDeclaration);
+
+        $id = Db::getInstance()->getValue($sql);
+
+        if ($id) {
+            return new self($id);
+        }
+
+        return null;
+    }
+
+    /**
      * Retourne le libellé du type de produit
      */
     public function getProductTypeLabel()

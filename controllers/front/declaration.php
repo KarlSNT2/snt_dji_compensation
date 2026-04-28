@@ -70,13 +70,29 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             $this->redirectWithNotifications($this->context->link->getPageLink('my-account'));
         }
 
-        // Recuperer le brouillon en cours ou null
-        $this->declaration = DJICompensationDeclaration::getLastByCustomer($this->context->customer->id);
+        // Verifier si on edite une declaration existante
+        $editId = (int) Tools::getValue('edit');
+        if ($editId) {
+            $this->declaration = DJICompensationDeclaration::getByIdAndCustomer($editId, $this->context->customer->id);
+            if (!$this->declaration || !$this->declaration->isEditable()) {
+                $this->errors[] = $this->module->l('Cette declaration ne peut pas etre modifiee.', 'declaration');
+                $this->declaration = null;
+            }
+        } else {
+            // Recuperer le brouillon en cours ou null
+            $this->declaration = DJICompensationDeclaration::getLastByCustomer($this->context->customer->id);
+        }
     }
 
     public function initContent()
     {
         parent::initContent();
+
+        // Traiter les actions AJAX
+        if (Tools::getValue('ajax')) {
+            $this->processAjaxAction();
+            return;
+        }
 
         if (Tools::isSubmit('submitDeclaration')) {
             $this->processDeclaration();
@@ -188,18 +204,108 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
                 return;
             }
 
+            $wasAlreadySubmitted = $this->declaration->status !== DJICompensationDeclaration::STATUS_DRAFT;
             $this->declaration->status = DJICompensationDeclaration::STATUS_SUBMITTED;
             $this->declaration->save();
 
             // Reset pour permettre une nouvelle declaration
             $this->declaration = null;
 
-            $this->success[] = $this->module->l('Votre declaration a ete soumise avec succes !', 'declaration');
+            if ($wasAlreadySubmitted) {
+                $this->success[] = $this->module->l('Votre declaration a ete mise a jour avec succes !', 'declaration');
+            } else {
+                $this->success[] = $this->module->l('Votre declaration a ete soumise avec succes !', 'declaration');
+            }
         } else {
             $this->success[] = $this->module->l('Brouillon enregistre.', 'declaration');
         }
 
         $this->redirectWithNotifications($this->context->link->getModuleLink($this->module->name, 'declaration'));
+    }
+
+    protected function processAjaxAction()
+    {
+        header('Content-Type: application/json');
+
+        $action = Tools::getValue('action');
+        $token = Tools::getValue('token');
+
+        if (Tools::getToken(false) !== $token) {
+            die(json_encode(['success' => false, 'message' => 'Session expiree']));
+        }
+
+        if (!$this->declaration || !$this->declaration->isEditable()) {
+            die(json_encode(['success' => false, 'message' => 'Declaration non modifiable']));
+        }
+
+        try {
+            $s3Service = $this->module->getS3Service();
+        } catch (Exception $e) {
+            die(json_encode(['success' => false, 'message' => 'Erreur de configuration']));
+        }
+
+        switch ($action) {
+            case 'deleteInvoice':
+                $this->ajaxDeleteInvoice($s3Service);
+                break;
+
+            case 'deleteStockProof':
+                $this->ajaxDeleteStockProof($s3Service);
+                break;
+
+            default:
+                die(json_encode(['success' => false, 'message' => 'Action inconnue']));
+        }
+    }
+
+    protected function ajaxDeleteInvoice($s3Service)
+    {
+        $idInvoice = (int) Tools::getValue('id_invoice');
+
+        $invoice = DJICompensationInvoice::getByIdAndDeclaration($idInvoice, $this->declaration->id);
+        if (!$invoice) {
+            die(json_encode(['success' => false, 'message' => 'Facture non trouvee']));
+        }
+
+        if ($invoice->deleteWithS3($s3Service)) {
+            $this->markDeclarationAsModified();
+            die(json_encode([
+                'success' => true,
+                'message' => 'Facture supprimee',
+                'count' => DJICompensationInvoice::countByDeclaration($this->declaration->id),
+            ]));
+        }
+
+        die(json_encode(['success' => false, 'message' => 'Erreur lors de la suppression']));
+    }
+
+    protected function ajaxDeleteStockProof($s3Service)
+    {
+        $idStockProof = (int) Tools::getValue('id_stock_proof');
+
+        $stockProof = DJICompensationStockProof::getByIdAndDeclaration($idStockProof, $this->declaration->id);
+        if (!$stockProof) {
+            die(json_encode(['success' => false, 'message' => 'Photo non trouvee']));
+        }
+
+        if ($stockProof->deleteWithS3($s3Service)) {
+            $this->markDeclarationAsModified();
+            die(json_encode([
+                'success' => true,
+                'message' => 'Photo supprimee',
+                'count' => DJICompensationStockProof::countByDeclaration($this->declaration->id),
+            ]));
+        }
+
+        die(json_encode(['success' => false, 'message' => 'Erreur lors de la suppression']));
+    }
+
+    protected function markDeclarationAsModified()
+    {
+        if ($this->declaration->status !== DJICompensationDeclaration::STATUS_DRAFT) {
+            $this->declaration->status = DJICompensationDeclaration::STATUS_SUBMITTED;
+            $this->declaration->save();
+        }
     }
 
     protected function processXlsxUpload($s3Service)

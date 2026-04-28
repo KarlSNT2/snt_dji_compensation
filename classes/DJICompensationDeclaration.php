@@ -243,7 +243,31 @@ class DJICompensationDeclaration extends ObjectModel
      */
     public function isEditable()
     {
-        return $this->status === self::STATUS_DRAFT;
+        return in_array($this->status, [
+            self::STATUS_DRAFT,
+            self::STATUS_SUBMITTED,
+            self::STATUS_PROCESSING,
+        ]);
+    }
+
+    /**
+     * Recupere une declaration par son ID et verifie l'appartenance au client
+     */
+    public static function getByIdAndCustomer($idDeclaration, $idCustomer)
+    {
+        $sql = new DbQuery();
+        $sql->select('id_declaration');
+        $sql->from(self::$definition['table']);
+        $sql->where('id_declaration = ' . (int) $idDeclaration);
+        $sql->where('id_customer = ' . (int) $idCustomer);
+
+        $id = Db::getInstance()->getValue($sql);
+
+        if ($id) {
+            return new self($id);
+        }
+
+        return null;
     }
 
     /**

@@ -69,6 +69,7 @@
                                     <th>{l s='Date' mod='snt_dji_compensation'}</th>
                                     <th>{l s='Fichier' mod='snt_dji_compensation'}</th>
                                     <th>{l s='Statut' mod='snt_dji_compensation'}</th>
+                                    <th>{l s='Actions' mod='snt_dji_compensation'}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -86,6 +87,15 @@
                                         <td>
                                             <span class="badge badge-{$history.status_class}">{$history.status_label}</span>
                                         </td>
+                                        <td>
+                                            {if $history.status == 'draft' || $history.status == 'submitted' || $history.status == 'processing'}
+                                                <a href="{$link->getModuleLink('snt_dji_compensation', 'declaration', ['edit' => $history.id_declaration])}" class="btn btn-sm btn-outline-primary" title="{l s='Modifier' mod='snt_dji_compensation'}">
+                                                    <i class="material-icons" style="font-size:16px;">edit</i>
+                                                </a>
+                                            {else}
+                                                <span class="text-muted">-</span>
+                                            {/if}
+                                        </td>
                                     </tr>
                                 {/foreach}
                             </tbody>
@@ -101,7 +111,12 @@
                 <h5 class="mb-0">
                     {if $declaration}
                         <i class="material-icons">edit</i>
-                        {l s='Brouillon en cours' mod='snt_dji_compensation'} - {$declaration->reference|escape:'html':'UTF-8'}
+                        {if $declaration->status == 'draft'}
+                            {l s='Brouillon en cours' mod='snt_dji_compensation'}
+                        {else}
+                            {l s='Modification de declaration' mod='snt_dji_compensation'}
+                        {/if}
+                        - {$declaration->reference|escape:'html':'UTF-8'}
                     {else}
                         <i class="material-icons">add_circle</i>
                         {l s='Nouvelle declaration' mod='snt_dji_compensation'}
@@ -153,16 +168,21 @@
                         </div>
                         <div class="card-body">
                             {if $invoices|count > 0}
-                                <div class="existing-files mb-3">
-                                    <strong>{l s='Factures deja envoyees :' mod='snt_dji_compensation'} ({$invoices|count})</strong>
+                                <div class="existing-files mb-3" id="invoices-list">
+                                    <strong>{l s='Factures deja envoyees :' mod='snt_dji_compensation'} (<span class="invoices-count">{$invoices|count}</span>)</strong>
                                     <ul class="list-group mt-2">
                                         {foreach from=$invoices item=invoice}
-                                            <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                                            <li class="list-group-item d-flex justify-content-between align-items-center py-2" data-invoice-id="{$invoice.id_invoice}">
                                                 <span>
                                                     <i class="material-icons text-danger" style="font-size:18px;vertical-align:middle;">picture_as_pdf</i>
                                                     {$invoice.original_filename|escape:'html':'UTF-8'}
                                                 </span>
-                                                <span class="badge badge-secondary">{($invoice.file_size/1024)|string_format:"%.0f"} Ko</span>
+                                                <span>
+                                                    <span class="badge badge-secondary mr-2">{($invoice.file_size/1024)|string_format:"%.0f"} Ko</span>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger delete-invoice-btn" data-id="{$invoice.id_invoice}" title="{l s='Supprimer' mod='snt_dji_compensation'}">
+                                                        <i class="material-icons" style="font-size:16px;">delete</i>
+                                                    </button>
+                                                </span>
                                             </li>
                                         {/foreach}
                                     </ul>
@@ -209,17 +229,22 @@
                                 </div>
 
                                 {if $stock_proofs|count > 0}
-                                    <div class="existing-files mb-3">
-                                        <strong>{l s='Photos deja envoyees :' mod='snt_dji_compensation'} ({$stock_proofs|count})</strong>
+                                    <div class="existing-files mb-3" id="stock-proofs-list">
+                                        <strong>{l s='Photos deja envoyees :' mod='snt_dji_compensation'} (<span class="stock-proofs-count">{$stock_proofs|count}</span>)</strong>
                                         <ul class="list-group mt-2">
                                             {foreach from=$stock_proofs item=proof}
-                                                <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                                                <li class="list-group-item d-flex justify-content-between align-items-center py-2" data-stock-proof-id="{$proof.id_stock_proof}">
                                                     <span>
                                                         <i class="material-icons text-primary" style="font-size:18px;vertical-align:middle;">image</i>
                                                         {$proof.original_filename|escape:'html':'UTF-8'}
                                                         <span class="badge badge-info ml-1">{if $proof.product_type == 'mic'}Mic{else}Power{/if}</span>
                                                     </span>
-                                                    <span class="badge badge-secondary">{($proof.file_size/1024)|string_format:"%.0f"} Ko</span>
+                                                    <span>
+                                                        <span class="badge badge-secondary mr-2">{($proof.file_size/1024)|string_format:"%.0f"} Ko</span>
+                                                        <button type="button" class="btn btn-sm btn-outline-danger delete-stock-proof-btn" data-id="{$proof.id_stock_proof}" title="{l s='Supprimer' mod='snt_dji_compensation'}">
+                                                            <i class="material-icons" style="font-size:16px;">delete</i>
+                                                        </button>
+                                                    </span>
                                                 </li>
                                             {/foreach}
                                         </ul>
@@ -252,14 +277,20 @@
                         </a>
 
                         <div>
-                            <button type="submit" name="submitDeclaration" class="btn btn-secondary mb-2">
-                                <i class="material-icons">save</i>
-                                {l s='Enregistrer brouillon' mod='snt_dji_compensation'}
-                            </button>
+                            {if !$declaration || $declaration->status == 'draft'}
+                                <button type="submit" name="submitDeclaration" class="btn btn-secondary mb-2">
+                                    <i class="material-icons">save</i>
+                                    {l s='Enregistrer brouillon' mod='snt_dji_compensation'}
+                                </button>
+                            {/if}
 
                             <button type="submit" name="submitDeclaration" class="btn btn-primary mb-2 ml-2" onclick="document.querySelector('input[name=action]').value='submit';">
                                 <i class="material-icons">send</i>
-                                {l s='Soumettre' mod='snt_dji_compensation'}
+                                {if $declaration && $declaration->status != 'draft'}
+                                    {l s='Mettre a jour' mod='snt_dji_compensation'}
+                                {else}
+                                    {l s='Soumettre' mod='snt_dji_compensation'}
+                                {/if}
                             </button>
                             <input type="hidden" name="action" value="save">
                         </div>
@@ -268,9 +299,100 @@
             </div>
         </div>
     </div>
+{/block}
 
+{block name='javascript_bottom' append}
     <script>
-        var productTypes = {$product_types|json_encode};
-        var maxFileSizeBytes = {$max_file_size_bytes};
+        var djiProductTypes = {$product_types|json_encode};
+        var djiMaxFileSizeBytes = {$max_file_size_bytes};
+    </script>
+    <script>
+        (function() {
+            console.log('DJI Delete Script loaded');
+
+            var deleteAjaxUrl = '{$link->getModuleLink('snt_dji_compensation', 'declaration')|escape:'javascript'}';
+            var urlSeparator = (deleteAjaxUrl.indexOf('?') === -1) ? '?' : '&';
+            var csrfToken = '{$token|escape:'javascript'}';
+            var declarationId = {if $declaration}{$declaration->id}{else}0{/if};
+            var confirmDeleteMsg = '{l s='Etes-vous sur de vouloir supprimer ce fichier ?' mod='snt_dji_compensation' js=1}';
+
+            function handleDelete(type, id, listItem) {
+                var paramName = (type === 'invoice') ? 'id_invoice' : 'id_stock_proof';
+                var actionName = (type === 'invoice') ? 'deleteInvoice' : 'deleteStockProof';
+                var url = deleteAjaxUrl + urlSeparator + 'ajax=1&action=' + actionName + '&' + paramName + '=' + id + '&token=' + csrfToken + '&edit=' + declarationId;
+
+                console.log('Delete URL:', url);
+
+                fetch(url, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(response) {
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    return response.text();
+                })
+                .then(function(text) {
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        console.error('Reponse non-JSON:', text);
+                        throw new Error('Reponse invalide du serveur');
+                    }
+                })
+                .then(function(data) {
+                    if (data.success) {
+                        listItem.remove();
+                        var countClass = (type === 'invoice') ? '.invoices-count' : '.stock-proofs-count';
+                        var listId = (type === 'invoice') ? 'invoices-list' : 'stock-proofs-list';
+                        var countEl = document.querySelector(countClass);
+                        if (countEl) countEl.textContent = data.count;
+                        if (data.count == 0) {
+                            var listContainer = document.getElementById(listId);
+                            if (listContainer) listContainer.remove();
+                        }
+                    } else {
+                        alert(data.message || 'Erreur');
+                    }
+                })
+                .catch(function(err) {
+                    console.error('Erreur AJAX:', err);
+                    alert('Erreur: ' + err.message);
+                });
+            }
+
+            function initDeleteButtons() {
+                var invoiceBtns = document.querySelectorAll('.delete-invoice-btn');
+                var stockBtns = document.querySelectorAll('.delete-stock-proof-btn');
+
+                console.log('Invoice buttons found:', invoiceBtns.length);
+                console.log('Stock proof buttons found:', stockBtns.length);
+
+                invoiceBtns.forEach(function(btn) {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!confirm(confirmDeleteMsg)) return;
+                        handleDelete('invoice', this.dataset.id, this.closest('li'));
+                    });
+                });
+
+                stockBtns.forEach(function(btn) {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!confirm(confirmDeleteMsg)) return;
+                        handleDelete('stock_proof', this.dataset.id, this.closest('li'));
+                    });
+                });
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initDeleteButtons);
+            } else {
+                initDeleteButtons();
+            }
+        })();
     </script>
 {/block}

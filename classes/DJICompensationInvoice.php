@@ -108,6 +108,38 @@ class DJICompensationInvoice extends ObjectModel
     }
 
     /**
+     * Supprime une facture avec son fichier S3
+     */
+    public function deleteWithS3($s3Service)
+    {
+        if (!empty($this->s3_key)) {
+            $s3Service->delete($this->s3_key);
+        }
+
+        return $this->delete();
+    }
+
+    /**
+     * Recupere une facture par son ID et verifie l'appartenance a la declaration
+     */
+    public static function getByIdAndDeclaration($idInvoice, $idDeclaration)
+    {
+        $sql = new DbQuery();
+        $sql->select('id_invoice');
+        $sql->from(self::$definition['table']);
+        $sql->where('id_invoice = ' . (int) $idInvoice);
+        $sql->where('id_declaration = ' . (int) $idDeclaration);
+
+        $id = Db::getInstance()->getValue($sql);
+
+        if ($id) {
+            return new self($id);
+        }
+
+        return null;
+    }
+
+    /**
      * Retourne la taille formatée
      */
     public function getFormattedSize()
