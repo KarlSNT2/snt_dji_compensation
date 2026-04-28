@@ -1,0 +1,134 @@
+{
+  "name": "Declarations summary",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "46d061e9-bde2-4fdd-994b-23bf9e4d300b",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    dl.id_customer,\n    pc.company,\n    pc.email,\n    dl.reference_article,\n    p.produit,\n    p.ean,\n    SUM(dl.quantite_declaree) AS total_quantite,\n    p.compensation_ht AS compensation_unitaire_ht,\n    SUM(dl.quantite_declaree) * p.compensation_ht AS total_compensation_ht,\n    COUNT(DISTINCT dl.id_declaration) AS nb_declarations\nFROM declaration_lignes dl\nLEFT JOIN prestashop_customers pc ON pc.id_customer = dl.id_customer\nLEFT JOIN promotions_dji p ON p.reference_article = dl.reference_article\nGROUP BY\n    dl.id_customer,\n    pc.company,\n    pc.email,\n    dl.reference_article,\n    p.produit,\n    p.ean,\n    p.compensation_ht\nORDER BY dl.id_customer, dl.reference_article;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        528,
+        368
+      ],
+      "id": "c1a6b3cf-e223-41d5-abbe-a259cad46582",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "dISm0QOG03jvqYLL",
+          "name": "DB externe"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://dev-prestashop-2224c0698cb3.prestashop.sh/index.php?fc=module&module=snt_dji_compensation&controller=api&action=declarations-summary",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "150a0a00-2eaf-4da8-9590-acb0b3e78722",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "RcQ2z2vXydxGQuhz",
+          "name": "API Key Presta Module"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "lines",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        416,
+        0
+      ],
+      "id": "134d423a-fcb9-48b6-84ba-f4f7e9f56a4e",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lines = $input.all().map(i => i.json);\nconst aggregated = {};\n\nfor (const line of lines) {\n  const key = `${line.reference_article}|${line.date_debut}|${line.date_fin}|${line.id_customer}`;\n\n  if (!aggregated[key]) {\n    aggregated[key] = {\n      reference_article: line.reference_article,\n      produit: line.produit,\n      ean: line.ean,\n      date_debut: line.date_debut,\n      date_fin: line.date_fin,\n      compensation_unitaire_ht: line.compensation_ht,\n      id_customer: line.id_customer,\n      customer_company: line.customer_company,\n      customer_siret: line.customer_siret,\n      total_quantite: 0,\n      total_compensation_ht: 0,\n      nb_declarations: new Set()\n    };\n  }\n    aggregated[key].total_quantite += line.quantite_declaree;\n    aggregated[key].total_compensation_ht += line.quantite_declaree * line.compensation_ht;\n    aggregated[key].nb_declarations.add(line.id_declaration);\n  }\n\n  return Object.values(aggregated).map(item => ({\n    json: {\n      ...item,\n      nb_declarations: item.nb_declarations.size,\n      total_compensation_ht: Math.round(item.total_compensation_ht * 100) / 100\n    }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "7bd92eaa-e527-4481-a12b-36acc5a26aca",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "4a8f883f-b405-4513-849c-3d3f94009466",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7ba3ab14852dbb702a48496a98bc933d084ef27980f5ff171a5b9db8c19b65fe"
+  },
+  "id": "2r5cz3YXR1XAREef",
+  "tags": []
+}

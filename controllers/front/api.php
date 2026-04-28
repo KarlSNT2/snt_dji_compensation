@@ -73,6 +73,9 @@ class Snt_dji_compensationApiModuleFrontController extends ModuleFrontController
             case 'update-status':
                 $this->updateDeclarationStatus();
                 break;
+            case 'declarations-summary':
+                $this->getDeclarationsSummary();
+                break;
             default:
                 $this->jsonResponse(['error' => 'Not Found', 'message' => 'Unknown action'], 404);
         }
@@ -601,6 +604,108 @@ Gammes : Mic & Power '] ?? null,
                 'message' => 'Exception: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Retourne un resume des declarations groupees par promotion et client
+     * Pour export Google Sheets
+     */
+    protected function getDeclarationsSummary()
+    {
+        $status = Tools::getValue('status', '');
+        $validStatuses = ['submitted', 'processing', 'validated'];
+
+        // Filtrer par statut ou prendre tous les statuts valides
+        if ($status && in_array($status, $validStatuses)) {
+            $statusFilter = [pSQL($status)];
+        } else {
+            $statusFilter = $validStatuses;
+        }
+
+        // Recuperer toutes les declarations avec le statut filtre
+        $sql = new DbQuery();
+        $sql->select('d.id_declaration, d.id_customer, d.reference, d.status, d.xlsx_s3_key, d.date_add');
+        $sql->select('c.firstname, c.lastname, c.email, c.company, c.siret');
+        $sql->from('dji_compensation_declaration', 'd');
+        $sql->leftJoin('customer', 'c', 'c.id_customer = d.id_customer');
+        $sql->where('d.status IN ("' . implode('","', $statusFilter) . '")');
+        $sql->where('d.xlsx_s3_key IS NOT NULL AND d.xlsx_s3_key != ""');
+        $sql->orderBy('d.date_add ASC');
+
+        $declarations = Db::getInstance()->executeS($sql);
+
+        if (empty($declarations)) {
+            $this->jsonResponse([
+                'success' => true,
+                'total_declarations' => 0,
+                'total_lines' => 0,
+                'lines' => [],
+            ]);
+            return;
+        }
+
+        require_once _PS_MODULE_DIR_ . 'snt_dji_compensation/classes/DJICompensationS3Service.php';
+        require_once _PS_MODULE_DIR_ . 'snt_dji_compensation/classes/DJICompensationXlsxReader.php';
+
+        $s3 = new DJICompensationS3Service();
+        $allLines = [];
+        $errors = [];
+
+        foreach ($declarations as $decl) {
+            try {
+                $xlsxContent = $s3->get($decl['xlsx_s3_key']);
+                if ($xlsxContent === false) {
+                    $errors[] = ['id_declaration' => $decl['id_declaration'], 'error' => 'S3 download failed'];
+                    continue;
+                }
+
+                $tempFile = tempnam(sys_get_temp_dir(), 'dji_xlsx_');
+                file_put_contents($tempFile, $xlsxContent);
+
+                $reader = new DJICompensationXlsxReader($tempFile);
+                $result = $reader->readSheet(1, 1);
+                unlink($tempFile);
+
+                $qtyColumnName = 'Quantités déclarées pour compensation';
+
+                foreach ($result['data'] as $row) {
+                    $qty = isset($row[$qtyColumnName]) ? trim($row[$qtyColumnName]) : '';
+                    if ($qty !== '' && $qty !== null && $qty != 0) {
+                        $allLines[] = [
+                            'id_declaration' => (int) $decl['id_declaration'],
+                            'declaration_reference' => $decl['reference'],
+                            'declaration_status' => $decl['status'],
+                            'declaration_date' => $decl['date_add'],
+                            'id_customer' => (int) $decl['id_customer'],
+                            'customer_name' => trim($decl['firstname'] . ' ' . $decl['lastname']),
+                            'customer_email' => $decl['email'],
+                            'customer_company' => $decl['company'],
+                            'customer_siret' => $decl['siret'],
+                            'reference_article' => $row['Référence produit - STS'] ?? null,
+                            'produit' => $row['Produit'] ?? null,
+                            'ean' => $row['EAN Produit'] ?? null,
+                            'quantite_declaree' => (int) $qty,
+                            'prix_vente_ttc' => $this->parseNumber($row['Prix de vente TTC'] ?? null),
+                            'prix_promo_ttc' => $this->parseNumber($row['Prix Promo TTC'] ?? null),
+                            'compensation_ht' => $this->parseNumber($row['Compensation €HT'] ?? null),
+                            'date_debut' => $this->excelDateToISO($row['Date de début'] ?? null),
+                            'date_fin' => $this->excelDateToISO($row['Date de fin'] ?? null),
+                            'date_butoir' => $this->excelDateToISO($row['Date butoir de déclaration'] ?? null),
+                        ];
+                    }
+                }
+            } catch (Exception $e) {
+                $errors[] = ['id_declaration' => $decl['id_declaration'], 'error' => $e->getMessage()];
+            }
+        }
+
+        $this->jsonResponse([
+            'success' => true,
+            'total_declarations' => count($declarations),
+            'total_lines' => count($allLines),
+            'errors' => $errors,
+            'lines' => $allLines,
+        ]);
     }
 
     /**

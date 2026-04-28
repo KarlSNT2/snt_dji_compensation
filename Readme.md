@@ -13,6 +13,10 @@ Module PrestaShop permettant aux clients B2B d'effectuer leurs declarations de c
   - Upload de factures PDF (jusqu'a 50 fichiers)
   - Upload de photos de stock pour les produits DJI Mic/Power (jusqu'a 20 images)
 - **Systeme de brouillon** : Les clients peuvent sauvegarder leur progression et reprendre plus tard
+- **Edition des declarations** : 
+  - Brouillon : XLSX + PDF/photos editables
+  - Soumise/En traitement : PDF/photos editables uniquement (XLSX verrouille)
+  - Validee/Rejetee : Aucune modification possible
 - **Historique** : Visualisation de l'historique des declarations avec leur statut
 
 ### Cote Administrateur (Back-Office)
@@ -364,6 +368,48 @@ Met a jour le statut d'une declaration.
 }
 ```
 
+#### GET /api/dji-compensation/declarations-summary
+
+Retourne toutes les lignes declarees de toutes les declarations, avec infos client et promotion. Ideal pour export Google Sheets.
+
+**Parametres :**
+| Parametre | Type | Description |
+|-----------|------|-------------|
+| status | string | Filtrer par statut (submitted, processing, validated). Par defaut : tous |
+
+**Reponse :**
+```json
+{
+  "success": true,
+  "total_declarations": 4,
+  "total_lines": 10,
+  "errors": [],
+  "lines": [
+    {
+      "id_declaration": 1,
+      "declaration_reference": "DJI-8BB47F8E",
+      "declaration_status": "processing",
+      "declaration_date": "2026-04-24 11:21:59",
+      "id_customer": 704,
+      "customer_name": "Karl Duponchel",
+      "customer_email": "karl.d@snt2.fr",
+      "customer_company": "SNT2",
+      "customer_siret": "12345678901234",
+      "reference_article": "AR0059565",
+      "produit": "Osmo Mobile 7P",
+      "ean": "6941565997517",
+      "quantite_declaree": 10,
+      "prix_vente_ttc": 139,
+      "prix_promo_ttc": 115,
+      "compensation_ht": 14.4,
+      "date_debut": "2026-01-01",
+      "date_fin": "2026-01-31",
+      "date_butoir": "2026-02-06"
+    }
+  ]
+}
+```
+
 ### Exemple d'utilisation avec n8n
 
 #### Synchroniser les clients
@@ -433,4 +479,23 @@ Le module supporte un workflow n8n complet pour analyser automatiquement les dec
 
 **Tables PostgreSQL requises** : voir `scripts-sql/create_analyse_tables.sql`
 
-**Template workflow n8n** : voir `temp/workflow_analyse_declarations.json`
+**Template workflow n8n** : voir `n8n_workflows/DJI Compensation - Analyse Declarations.json`
+
+#### Export Google Sheets (agregation par promotion/client)
+
+Workflow pour exporter les declarations agregees par promotion et client :
+
+```
+[Trigger] --> [HTTP Request] --> [Split Out] --> [Code] --> [Google Sheets]
+              GET /declarations-summary          Agregation    Append/Update
+```
+
+1. **HTTP Request** : `GET /api/dji-compensation/declarations-summary`
+2. **Split Out** : field `lines`
+3. **Code** : Agregation par cle `(reference_article, date_debut, date_fin, id_customer)`
+4. **Google Sheets** : Ecriture des totaux
+
+**Cle d'agregation** : Une meme promotion est identifiee par `reference_article + date_debut + date_fin` (un produit peut avoir plusieurs promos sur des periodes differentes).
+
+**Colonnes suggerees** :
+| Reference | Produit | EAN | Date debut | Date fin | Client | SIRET | Qte declaree | Compensation HT | Nb declarations |

@@ -131,6 +131,7 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             'max_stock_proofs' => (int) Configuration::get('SNT_DJI_COMPENSATION_MAX_STOCK_PROOFS'),
             'product_types' => DJICompensationStockProof::getProductTypes(),
             'token' => Tools::getToken(false),
+            'xlsx_editable' => !$this->declaration || $this->declaration->isXlsxEditable(),
         ]);
 
         $this->setTemplate('module:snt_dji_compensation/views/templates/front/declaration.tpl');
@@ -170,8 +171,12 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             return;
         }
 
-        // Traiter XLSX
+        // Traiter XLSX (seulement si brouillon)
         if (isset($_FILES['xlsx_file']) && $_FILES['xlsx_file']['error'] === UPLOAD_ERR_OK) {
+            if (!$this->declaration->isXlsxEditable()) {
+                $this->errors[] = $this->module->l('Le fichier XLSX ne peut plus etre modifie apres soumission.', 'declaration');
+                return;
+            }
             if (!$this->processXlsxUpload($s3Service)) {
                 return;
             }

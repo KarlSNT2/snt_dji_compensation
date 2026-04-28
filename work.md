@@ -1,7 +1,174 @@
 # Journal de travail - Module SNT DJI Compensation
 
-**Date** : 22 avril 2026
+**Date** : 28 avril 2026
 **Projet** : Module PrestaShop de compensation DJI + Integration n8n
+
+---
+
+## 28 avril 2026 - Édition déclarations + Export Google Sheets
+
+### 1. Restriction d'édition du fichier XLSX
+
+**Problème** : Les clients pouvaient modifier le fichier XLSX même après soumission de la déclaration.
+
+**Solution** : Le fichier XLSX est maintenant verrouillé après soumission. Seuls les PDF/photos restent éditables.
+
+| Statut | XLSX | PDF/Photos |
+|--------|------|------------|
+| draft | ✅ éditable | ✅ éditable |
+| submitted | ❌ verrouillé | ✅ éditable |
+| processing | ❌ verrouillé | ✅ éditable |
+| validated/rejected | ❌ | ❌ |
+
+**Fichiers modifiés :**
+- `classes/DJICompensationDeclaration.php` : ajout méthode `isXlsxEditable()`
+- `controllers/front/declaration.php` : contrôle côté serveur + variable template
+- `views/templates/front/declaration.tpl` : affichage conditionnel zone XLSX
+
+---
+
+### 2. Nouvel endpoint API : declarations-summary
+
+**Objectif** : Récupérer toutes les lignes déclarées agrégées par promotion et client pour export Google Sheets.
+
+**Endpoint** : `GET /api/dji-compensation/declarations-summary`
+
+**Paramètres** :
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| status | string | Filtrer par statut (submitted, processing, validated) |
+
+**Réponse** :
+```json
+{
+  "success": true,
+  "total_declarations": 4,
+  "total_lines": 10,
+  "lines": [
+    {
+      "id_declaration": 1,
+      "declaration_reference": "DJI-8BB47F8E",
+      "declaration_status": "processing",
+      "declaration_date": "2026-04-24 11:21:59",
+      "id_customer": 704,
+      "customer_name": "Karl Duponchel",
+      "customer_email": "karl.d@snt2.fr",
+      "customer_company": "SNT2",
+      "customer_siret": null,
+      "reference_article": "AR0059565",
+      "produit": "Osmo Mobile 7P",
+      "ean": "6941565997517",
+      "quantite_declaree": 10,
+      "prix_promo_ttc": 115,
+      "compensation_ht": 14.4,
+      "date_debut": "2026-01-01",
+      "date_fin": "2026-01-31",
+      "date_butoir": "2026-02-06"
+    }
+  ]
+}
+```
+
+**Fichiers modifiés :**
+- `controllers/front/api.php` : ajout méthode `getDeclarationsSummary()`
+
+---
+
+### 3. Workflow n8n - Export Google Sheets (À FAIRE)
+
+**Architecture** :
+```
+[Schedule/Manual Trigger]
+        |
+        v
+[HTTP Request] GET /declarations-summary
+        |
+        v
+[Split Out] field: lines
+        |
+        v
+[Code] Agrégation par clé (reference_article + date_debut + date_fin + id_customer)
+        |
+        v
+[Google Sheets] Append/Update
+```
+
+**Code Node - Agrégation** :
+```javascript
+const lines = $input.all().map(i => i.json);
+const aggregated = {};
+
+for (const line of lines) {
+  const key = `${line.reference_article}|${line.date_debut}|${line.date_fin}|${line.id_customer}`;
+  
+  if (!aggregated[key]) {
+    aggregated[key] = {
+      reference_article: line.reference_article,
+      produit: line.produit,
+      ean: line.ean,
+      date_debut: line.date_debut,
+      date_fin: line.date_fin,
+      date_butoir: line.date_butoir,
+      prix_promo_ttc: line.prix_promo_ttc,
+      compensation_unitaire_ht: line.compensation_ht,
+      id_customer: line.id_customer,
+      customer_company: line.customer_company,
+      customer_email: line.customer_email,
+      customer_siret: line.customer_siret,
+      total_quantite: 0,
+      total_compensation_ht: 0,
+      declarations: []
+    };
+  }
+  
+  aggregated[key].total_quantite += line.quantite_declaree;
+  aggregated[key].total_compensation_ht += line.quantite_declaree * line.compensation_ht;
+  
+  if (!aggregated[key].declarations.includes(line.declaration_reference)) {
+    aggregated[key].declarations.push(line.declaration_reference);
+  }
+}
+
+const results = [];
+for (const key in aggregated) {
+  const item = aggregated[key];
+  results.push({
+    json: {
+      reference_article: item.reference_article,
+      produit: item.produit,
+      ean: item.ean,
+      date_debut: item.date_debut,
+      date_fin: item.date_fin,
+      date_butoir: item.date_butoir,
+      prix_promo_ttc: item.prix_promo_ttc,
+      compensation_unitaire_ht: item.compensation_unitaire_ht,
+      id_customer: item.id_customer,
+      customer_company: item.customer_company,
+      customer_email: item.customer_email,
+      customer_siret: item.customer_siret,
+      total_quantite: item.total_quantite,
+      total_compensation_ht: Math.round(item.total_compensation_ht * 100) / 100,
+      nb_declarations: item.declarations.length,
+      declarations_refs: item.declarations.join(', ')
+    }
+  });
+}
+
+return results;
+```
+
+**Colonnes Google Sheets** :
+| Référence | Produit | EAN | Date début | Date fin | Date butoir | Client | SIRET | Email | Qté déclarée | Compensation unit. HT | Total compensation HT | Nb déclarations | Références déclarations |
+
+---
+
+### TODO - Actions restantes
+
+- [ ] Créer le workflow n8n complet "Export Google Sheets"
+- [ ] Configurer le Google Sheets (créer le fichier, partager accès)
+- [ ] Choisir le mode d'écriture : Append (historique) ou Update (vue actuelle)
+- [ ] Créer workflow n8n "Sync Customers" pour alimenter `prestashop_customers`
+- [ ] Ajouter notification Slack/Email en cas d'anomalies (workflow analyse)
 
 ---
 
@@ -671,23 +838,31 @@ RESTART IDENTITY CASCADE;
 ```
 snt_dji_compensation/
 ├── classes/
-│   ├── DJICompensationDeclaration.php    (modifie)
+│   ├── DJICompensationDeclaration.php    (modifie - isXlsxEditable())
 │   ├── DJICompensationMailService.php    (cree)
 │   └── DJICompensationXlsxReader.php     (cree)
 ├── controllers/
 │   └── front/
-│       ├── api.php                        (modifie - endpoints analyse)
-│       └── declaration.php                (modifie)
+│       ├── api.php                        (modifie - declarations-summary)
+│       └── declaration.php                (modifie - restriction XLSX)
 ├── mails/
 │   ├── index.php                          (cree)
 │   └── fr/
 │       ├── index.php                      (cree)
 │       ├── upload_error.html              (cree)
 │       └── upload_error.txt               (cree)
+├── n8n_workflows/
+│   ├── DJI Compensation - Analyse Declarations.json
+│   ├── [DONE] Insert Actual Promotions.json
+│   └── [DONE] TRUNCATE promotions_dji.json
 ├── scripts-sql/
-│   └── create_analyse_tables.sql          (cree)
-├── temp/
-│   └── workflow_analyse_declarations.json (cree - template n8n)
+│   ├── 01_create_table_promotions_dji.sql
+│   ├── 02_create_table_factures_revendeur.sql
+│   ├── 03_create_table_prestashop_customers.sql
+│   └── 04_create_analyse_tables.sql
+├── views/templates/front/
+│   └── declaration.tpl                    (modifie - zone XLSX conditionnelle)
 ├── snt_dji_compensation.php               (modifie)
-└── Readme.md                              (modifie)
+├── readme.md                              (modifie)
+└── work.md                                (ce fichier)
 ```

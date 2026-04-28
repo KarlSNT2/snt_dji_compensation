@@ -143,18 +143,25 @@
                                 </div>
                             {/if}
 
-                            <div class="dropzone-container" id="xlsx-dropzone">
-                                <input type="file" id="xlsx_file" name="xlsx_file" accept=".xlsx" class="dropzone-input">
-                                <div class="dropzone-content">
-                                    <i class="material-icons">description</i>
-                                    <p>{l s='Glissez votre fichier XLSX ici' mod='snt_dji_compensation'}</p>
-                                    <span>{l s='ou cliquez pour parcourir' mod='snt_dji_compensation'}</span>
+                            {if $xlsx_editable}
+                                <div class="dropzone-container" id="xlsx-dropzone">
+                                    <input type="file" id="xlsx_file" name="xlsx_file" accept=".xlsx" class="dropzone-input">
+                                    <div class="dropzone-content">
+                                        <i class="material-icons">description</i>
+                                        <p>{l s='Glissez votre fichier XLSX ici' mod='snt_dji_compensation'}</p>
+                                        <span>{l s='ou cliquez pour parcourir' mod='snt_dji_compensation'}</span>
+                                    </div>
+                                    <div class="dropzone-preview" id="xlsx-preview"></div>
                                 </div>
-                                <div class="dropzone-preview" id="xlsx-preview"></div>
-                            </div>
-                            <small class="form-text text-muted mt-2">
-                                {l s='Format : XLSX. Taille max :' mod='snt_dji_compensation'} {$max_file_size} Mo
-                            </small>
+                                <small class="form-text text-muted mt-2">
+                                    {l s='Format : XLSX. Taille max :' mod='snt_dji_compensation'} {$max_file_size} Mo
+                                </small>
+                            {else}
+                                <div class="alert alert-info mb-0">
+                                    <i class="material-icons" style="font-size:18px;vertical-align:middle;">lock</i>
+                                    {l s='Le fichier de declaration ne peut plus etre modifie apres soumission. Vous pouvez uniquement ajouter ou supprimer des factures et photos.' mod='snt_dji_compensation'}
+                                </div>
+                            {/if}
                         </div>
                     </div>
 

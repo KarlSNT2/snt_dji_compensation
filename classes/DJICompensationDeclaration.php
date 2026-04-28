@@ -239,7 +239,7 @@ class DJICompensationDeclaration extends ObjectModel
     }
 
     /**
-     * Verifie si la declaration peut etre modifiee
+     * Verifie si la declaration peut etre modifiee (PDF/photos)
      */
     public function isEditable()
     {
@@ -248,6 +248,14 @@ class DJICompensationDeclaration extends ObjectModel
             self::STATUS_SUBMITTED,
             self::STATUS_PROCESSING,
         ]);
+    }
+
+    /**
+     * Verifie si le fichier XLSX peut etre modifie (brouillon uniquement)
+     */
+    public function isXlsxEditable()
+    {
+        return $this->status === self::STATUS_DRAFT;
     }
 
     /**
