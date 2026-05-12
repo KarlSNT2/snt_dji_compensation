@@ -55,3 +55,62 @@
 		</div>
 	</div>
 </div>
+
+{if $template_history|count > 0}
+<div class="panel">
+	<h3><i class="icon icon-history"></i> {l s='Historique des templates' mod='snt_dji_compensation'}</h3>
+	<p class="text-muted">
+		{l s='Les anciens templates sont conserves. Vous pouvez restaurer un template precedent si necessaire.' mod='snt_dji_compensation'}
+	</p>
+	<div class="table-responsive">
+		<table class="table table-striped">
+			<thead>
+				<tr>
+					<th>{l s='Date' mod='snt_dji_compensation'}</th>
+					<th>{l s='Fichier original' mod='snt_dji_compensation'}</th>
+					<th>{l s='Taille' mod='snt_dji_compensation'}</th>
+					<th>{l s='Ajoute par' mod='snt_dji_compensation'}</th>
+					<th>{l s='Statut' mod='snt_dji_compensation'}</th>
+					<th>{l s='Actions' mod='snt_dji_compensation'}</th>
+				</tr>
+			</thead>
+			<tbody>
+				{foreach from=$template_history item=template}
+				<tr{if $template.is_active} class="success"{/if}>
+					<td>{$template.date_add|date_format:'%d/%m/%Y %H:%M'}</td>
+					<td>
+						<strong>{$template.original_filename|escape:'html':'UTF-8'}</strong>
+						<br><small class="text-muted">{$template.filename|escape:'html':'UTF-8'}</small>
+					</td>
+					<td>{$template.file_size_formatted}</td>
+					<td>{$template.employee_name|escape:'html':'UTF-8'}</td>
+					<td>
+						{if $template.is_active}
+							<span class="label label-success">{l s='Actif' mod='snt_dji_compensation'}</span>
+						{elseif $template.file_exists}
+							<span class="label label-default">{l s='Archive' mod='snt_dji_compensation'}</span>
+						{else}
+							<span class="label label-danger">{l s='Fichier manquant' mod='snt_dji_compensation'}</span>
+						{/if}
+					</td>
+					<td>
+						{if !$template.is_active && $template.file_exists}
+							<form method="post" action="{$configure_link|escape:'html':'UTF-8'}" style="display:inline;">
+								<input type="hidden" name="id_template" value="{$template.id_template}">
+								<button type="submit" name="restoreTemplate" class="btn btn-sm btn-default" onclick="return confirm('{l s='Restaurer ce template ?' mod='snt_dji_compensation' js=1}');">
+									<i class="icon icon-undo"></i> {l s='Restaurer' mod='snt_dji_compensation'}
+								</button>
+							</form>
+						{elseif $template.is_active}
+							<span class="text-success"><i class="icon icon-check"></i> {l s='En cours' mod='snt_dji_compensation'}</span>
+						{else}
+							<span class="text-muted">-</span>
+						{/if}
+					</td>
+				</tr>
+				{/foreach}
+			</tbody>
+		</table>
+	</div>
+</div>
+{/if}

@@ -88,12 +88,13 @@
                                             <span class="badge badge-{$history.status_class}">{$history.status_label}</span>
                                         </td>
                                         <td>
+                                            <a href="{$link->getModuleLink('snt_dji_compensation', 'declaration', ['view' => $history.id_declaration])}" class="btn btn-sm btn-outline-secondary" title="{l s='Consulter' mod='snt_dji_compensation'}">
+                                                <i class="material-icons" style="font-size:16px;">visibility</i>
+                                            </a>
                                             {if $history.status == 'draft' || $history.status == 'submitted' || $history.status == 'processing'}
                                                 <a href="{$link->getModuleLink('snt_dji_compensation', 'declaration', ['edit' => $history.id_declaration])}" class="btn btn-sm btn-outline-primary" title="{l s='Modifier' mod='snt_dji_compensation'}">
                                                     <i class="material-icons" style="font-size:16px;">edit</i>
                                                 </a>
-                                            {else}
-                                                <span class="text-muted">-</span>
                                             {/if}
                                         </td>
                                     </tr>
@@ -137,9 +138,17 @@
                         </div>
                         <div class="card-body">
                             {if $declaration && $declaration->xlsx_original_filename}
-                                <div class="alert alert-success">
-                                    <strong>{l s='Fichier actuel :' mod='snt_dji_compensation'}</strong>
-                                    {$declaration->xlsx_original_filename|escape:'html':'UTF-8'}
+                                <div class="alert alert-success d-flex justify-content-between align-items-center">
+                                    <span>
+                                        <strong>{l s='Fichier actuel :' mod='snt_dji_compensation'}</strong>
+                                        {$declaration->xlsx_original_filename|escape:'html':'UTF-8'}
+                                    </span>
+                                    {if $xlsx_url}
+                                        <a href="{$xlsx_url}" class="btn btn-sm btn-success" target="_blank" title="{l s='Telecharger' mod='snt_dji_compensation'}">
+                                            <i class="material-icons" style="font-size:16px;vertical-align:middle;">download</i>
+                                            {l s='Telecharger' mod='snt_dji_compensation'}
+                                        </a>
+                                    {/if}
                                 </div>
                             {/if}
 
@@ -186,6 +195,11 @@
                                                 </span>
                                                 <span>
                                                     <span class="badge badge-secondary mr-2">{($invoice.file_size/1024)|string_format:"%.0f"} Ko</span>
+                                                    {if $invoice.presigned_url}
+                                                        <a href="{$invoice.presigned_url}" class="btn btn-sm btn-outline-primary mr-1" target="_blank" title="{l s='Telecharger' mod='snt_dji_compensation'}">
+                                                            <i class="material-icons" style="font-size:16px;">download</i>
+                                                        </a>
+                                                    {/if}
                                                     <button type="button" class="btn btn-sm btn-outline-danger delete-invoice-btn" data-id="{$invoice.id_invoice}" title="{l s='Supprimer' mod='snt_dji_compensation'}">
                                                         <i class="material-icons" style="font-size:16px;">delete</i>
                                                     </button>
@@ -248,6 +262,11 @@
                                                     </span>
                                                     <span>
                                                         <span class="badge badge-secondary mr-2">{($proof.file_size/1024)|string_format:"%.0f"} Ko</span>
+                                                        {if $proof.presigned_url}
+                                                            <a href="{$proof.presigned_url}" class="btn btn-sm btn-outline-primary mr-1" target="_blank" title="{l s='Telecharger' mod='snt_dji_compensation'}">
+                                                                <i class="material-icons" style="font-size:16px;">download</i>
+                                                            </a>
+                                                        {/if}
                                                         <button type="button" class="btn btn-sm btn-outline-danger delete-stock-proof-btn" data-id="{$proof.id_stock_proof}" title="{l s='Supprimer' mod='snt_dji_compensation'}">
                                                             <i class="material-icons" style="font-size:16px;">delete</i>
                                                         </button>

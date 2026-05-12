@@ -31,6 +31,7 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
     public $ssl = true;
 
     private $declaration;
+    private $viewMode = false;
 
     /**
      * Notifie une erreur d'upload par email si active
@@ -70,6 +71,18 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             $this->redirectWithNotifications($this->context->link->getPageLink('my-account'));
         }
 
+        // Verifier si on consulte une declaration (mode lecture seule)
+        $viewId = (int) Tools::getValue('view');
+        if ($viewId) {
+            $this->declaration = DJICompensationDeclaration::getByIdAndCustomer($viewId, $this->context->customer->id);
+            if (!$this->declaration) {
+                $this->errors[] = $this->module->l('Declaration non trouvee.', 'declaration');
+                $this->redirectWithNotifications($this->context->link->getModuleLink($this->module->name, 'declaration'));
+            }
+            $this->viewMode = true;
+            return;
+        }
+
         // Verifier si on edite une declaration existante
         $editId = (int) Tools::getValue('edit');
         if ($editId) {
@@ -94,6 +107,12 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             return;
         }
 
+        // Mode consultation (lecture seule)
+        if ($this->viewMode && $this->declaration) {
+            $this->initViewContent();
+            return;
+        }
+
         if (Tools::isSubmit('submitDeclaration')) {
             $this->processDeclaration();
         }
@@ -101,10 +120,34 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
         // Fichiers de la declaration en cours
         $invoices = [];
         $stockProofs = [];
+        $xlsxUrl = null;
+        $s3Service = null;
 
         if ($this->declaration) {
+            try {
+                $s3Service = $this->module->getS3Service();
+            } catch (Exception $e) {
+                $s3Service = null;
+            }
+
+            // URL pre-signee pour le fichier XLSX
+            if ($s3Service && $this->declaration->xlsx_s3_key) {
+                $xlsxUrl = $s3Service->getPresignedUrl($this->declaration->xlsx_s3_key, 3600);
+            }
+
             $invoices = DJICompensationInvoice::getByDeclaration($this->declaration->id);
+            if ($s3Service) {
+                foreach ($invoices as &$invoice) {
+                    $invoice['presigned_url'] = $s3Service->getPresignedUrl($invoice['s3_key'], 3600);
+                }
+            }
+
             $stockProofs = DJICompensationStockProof::getByDeclaration($this->declaration->id);
+            if ($s3Service) {
+                foreach ($stockProofs as &$proof) {
+                    $proof['presigned_url'] = $s3Service->getPresignedUrl($proof['s3_key'], 3600);
+                }
+            }
         }
 
         // Historique des declarations
@@ -122,6 +165,7 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             'declaration_history' => $declarationHistory,
             'invoices' => $invoices,
             'stock_proofs' => $stockProofs,
+            'xlsx_url' => $xlsxUrl,
             'has_template' => $this->module->hasTemplate(),
             'download_link' => $this->context->link->getModuleLink($this->module->name, 'download'),
             'my_account_link' => $this->context->link->getPageLink('my-account'),
@@ -135,6 +179,52 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
         ]);
 
         $this->setTemplate('module:snt_dji_compensation/views/templates/front/declaration.tpl');
+    }
+
+    /**
+     * Affiche la vue de consultation d'une declaration
+     */
+    protected function initViewContent()
+    {
+        try {
+            $s3Service = $this->module->getS3Service();
+        } catch (Exception $e) {
+            $s3Service = null;
+        }
+
+        // URL pre-signee pour le fichier XLSX
+        $xlsxUrl = null;
+        if ($s3Service && $this->declaration->xlsx_s3_key) {
+            $xlsxUrl = $s3Service->getPresignedUrl($this->declaration->xlsx_s3_key, 3600);
+        }
+
+        // Factures avec URLs pre-signees
+        $invoices = DJICompensationInvoice::getByDeclaration($this->declaration->id);
+        if ($s3Service) {
+            foreach ($invoices as &$invoice) {
+                $invoice['presigned_url'] = $s3Service->getPresignedUrl($invoice['s3_key'], 3600);
+            }
+        }
+
+        // Photos de stock avec URLs pre-signees
+        $stockProofs = DJICompensationStockProof::getByDeclaration($this->declaration->id);
+        if ($s3Service) {
+            foreach ($stockProofs as &$proof) {
+                $proof['presigned_url'] = $s3Service->getPresignedUrl($proof['s3_key'], 3600);
+            }
+        }
+
+        $this->context->smarty->assign([
+            'declaration' => $this->declaration,
+            'declaration_status_label' => $this->declaration->getStatusLabel(),
+            'declaration_status_class' => $this->declaration->getStatusBadgeClass(),
+            'xlsx_url' => $xlsxUrl,
+            'invoices' => $invoices,
+            'stock_proofs' => $stockProofs,
+            'declarations_link' => $this->context->link->getModuleLink($this->module->name, 'declaration'),
+        ]);
+
+        $this->setTemplate('module:snt_dji_compensation/views/templates/front/declaration_view.tpl');
     }
 
     protected function processDeclaration()

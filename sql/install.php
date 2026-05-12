@@ -71,6 +71,20 @@ $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'dji_compensation_stock_
     KEY `product_type` (`product_type`)
 ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
 
+// Table pour l'historique des templates admin
+$sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'dji_compensation_template_history` (
+    `id_template` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `filename` varchar(255) NOT NULL,
+    `original_filename` varchar(255) NOT NULL,
+    `file_size` int(11) UNSIGNED NOT NULL DEFAULT 0,
+    `is_active` tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
+    `id_employee` int(11) UNSIGNED DEFAULT NULL,
+    `date_add` datetime NOT NULL,
+    PRIMARY KEY (`id_template`),
+    KEY `is_active` (`is_active`),
+    KEY `date_add` (`date_add`)
+) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
+
 foreach ($sql as $query) {
     if (Db::getInstance()->execute($query) == false) {
         return false;

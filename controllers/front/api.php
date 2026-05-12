@@ -671,6 +671,12 @@ Gammes : Mic & Power '] ?? null,
                 foreach ($result['data'] as $row) {
                     $qty = isset($row[$qtyColumnName]) ? trim($row[$qtyColumnName]) : '';
                     if ($qty !== '' && $qty !== null && $qty != 0) {
+                        $compensationHt = $this->parseNumber($row['Compensation €HT'] ?? null);
+                        $qtyInt = (int) $qty;
+                        $totalCompensation = ($compensationHt !== null && $qtyInt > 0)
+                            ? round($compensationHt * $qtyInt, 2)
+                            : null;
+
                         $allLines[] = [
                             'id_declaration' => (int) $decl['id_declaration'],
                             'declaration_reference' => $decl['reference'],
@@ -684,13 +690,18 @@ Gammes : Mic & Power '] ?? null,
                             'reference_article' => $row['Référence produit - STS'] ?? null,
                             'produit' => $row['Produit'] ?? null,
                             'ean' => $row['EAN Produit'] ?? null,
-                            'quantite_declaree' => (int) $qty,
+                            'quantite_declaree' => $qtyInt,
                             'prix_vente_ttc' => $this->parseNumber($row['Prix de vente TTC'] ?? null),
                             'prix_promo_ttc' => $this->parseNumber($row['Prix Promo TTC'] ?? null),
-                            'compensation_ht' => $this->parseNumber($row['Compensation €HT'] ?? null),
+                            'compensation_ht' => $compensationHt,
+                            'total_compensation_ht' => $totalCompensation,
                             'date_debut' => $this->excelDateToISO($row['Date de début'] ?? null),
                             'date_fin' => $this->excelDateToISO($row['Date de fin'] ?? null),
                             'date_butoir' => $this->excelDateToISO($row['Date butoir de déclaration'] ?? null),
+                            'numero_serie' => $row['Numéro de série produit (SN)
+Gammes : Mic & Power '] ?? null,
+                            'reference_avoir' => $row['Référence AVOIR revendeur
+(si attendu)'] ?? null,
                         ];
                     }
                 }

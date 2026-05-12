@@ -74,82 +74,56 @@
 
 ---
 
-### 3. Workflow n8n - Export Google Sheets (À FAIRE)
+### 3. Workflow n8n - Export Google Sheets (DONE)
 
 **Architecture** :
 ```
-[Schedule/Manual Trigger]
+[Manual Trigger]
         |
-        v
-[HTTP Request] GET /declarations-summary
-        |
-        v
-[Split Out] field: lines
-        |
-        v
-[Code] Agrégation par clé (reference_article + date_debut + date_fin + id_customer)
-        |
-        v
-[Google Sheets] Append/Update
+        +---> [HTTP Request] GET /declarations-summary
+        |              |
+        |              v
+        |        [Split Out] field: lines
+        |              |
+        +---> [Postgres] GET type_promotion from promotions_dji
+                       |
+                       v
+               [Merge] Join on reference_article
+                       |
+                       v
+               [Code] Map to Google Sheets columns
+                       |
+                       v
+               [Google Sheets] Append
 ```
 
-**Code Node - Agrégation** :
+**Endpoint API modifié** : `declarations-summary` retourne maintenant :
+- `total_compensation_ht` : calculé côté API (quantite × compensation_ht)
+- `numero_serie` : numéro de série du produit (SN)
+- `reference_avoir` : référence avoir revendeur
+
+**Colonnes Google Sheets** :
+| NOM DU CLIENT | TYPE DE PROMO | DATE DEBUT | DATE FIN | QUANTITE | COMPENSATION HT | TOTAL | REF AVOIR | SN |
+
+**Code Node - Map to Google Sheets Columns** :
 ```javascript
-const lines = $input.all().map(i => i.json);
-const aggregated = {};
-
-for (const line of lines) {
-  const key = `${line.reference_article}|${line.date_debut}|${line.date_fin}|${line.id_customer}`;
-  
-  if (!aggregated[key]) {
-    aggregated[key] = {
-      reference_article: line.reference_article,
-      produit: line.produit,
-      ean: line.ean,
-      date_debut: line.date_debut,
-      date_fin: line.date_fin,
-      date_butoir: line.date_butoir,
-      prix_promo_ttc: line.prix_promo_ttc,
-      compensation_unitaire_ht: line.compensation_ht,
-      id_customer: line.id_customer,
-      customer_company: line.customer_company,
-      customer_email: line.customer_email,
-      customer_siret: line.customer_siret,
-      total_quantite: 0,
-      total_compensation_ht: 0,
-      declarations: []
-    };
-  }
-  
-  aggregated[key].total_quantite += line.quantite_declaree;
-  aggregated[key].total_compensation_ht += line.quantite_declaree * line.compensation_ht;
-  
-  if (!aggregated[key].declarations.includes(line.declaration_reference)) {
-    aggregated[key].declarations.push(line.declaration_reference);
-  }
-}
-
+const items = $input.all();
 const results = [];
-for (const key in aggregated) {
-  const item = aggregated[key];
+
+for (const item of items) {
+  const d = item.json;
+  
   results.push({
     json: {
-      reference_article: item.reference_article,
-      produit: item.produit,
-      ean: item.ean,
-      date_debut: item.date_debut,
-      date_fin: item.date_fin,
-      date_butoir: item.date_butoir,
-      prix_promo_ttc: item.prix_promo_ttc,
-      compensation_unitaire_ht: item.compensation_unitaire_ht,
-      id_customer: item.id_customer,
-      customer_company: item.customer_company,
-      customer_email: item.customer_email,
-      customer_siret: item.customer_siret,
-      total_quantite: item.total_quantite,
-      total_compensation_ht: Math.round(item.total_compensation_ht * 100) / 100,
-      nb_declarations: item.declarations.length,
-      declarations_refs: item.declarations.join(', ')
+      'NOM DU CLIENT': d.customer_company || d.customer_name || '',
+      'TYPE DE PROMO': d.type_promotion || '',
+      'DATE DEBUT': d.date_debut || '',
+      'DATE FIN': d.date_fin || '',
+      'QUANTITE': d.quantite_declaree || 0,
+      'COMPENSATION HT': d.compensation_ht || 0,
+      'TOTAL': d.total_compensation_ht || (d.quantite_declaree * d.compensation_ht) || 0,
+      'REF AVOIR': d.reference_avoir || '',
+      'SN': d.numero_serie || ''
     }
   });
 }
@@ -157,18 +131,70 @@ for (const key in aggregated) {
 return results;
 ```
 
-**Colonnes Google Sheets** :
-| Référence | Produit | EAN | Date début | Date fin | Date butoir | Client | SIRET | Email | Qté déclarée | Compensation unit. HT | Total compensation HT | Nb déclarations | Références déclarations |
+**Configuration Google Sheets** :
+1. Importer le workflow `Declarations summary.json`
+2. Configurer le credential Google Sheets OAuth2
+3. Sélectionner le document et la feuille dans le node "Google Sheets - Append"
+4. Mode "Append Row" pour ajouter les lignes
 
 ---
 
 ### TODO - Actions restantes
 
-- [ ] Créer le workflow n8n complet "Export Google Sheets"
-- [ ] Configurer le Google Sheets (créer le fichier, partager accès)
-- [ ] Choisir le mode d'écriture : Append (historique) ou Update (vue actuelle)
+- [x] Créer le workflow n8n complet "Export Google Sheets"
+- [x] API declarations-summary mise à jour (total_compensation_ht, numero_serie, reference_avoir)
+- [x] Configurer le Google Sheets OAuth2 dans n8n
 - [ ] Créer workflow n8n "Sync Customers" pour alimenter `prestashop_customers`
 - [ ] Ajouter notification Slack/Email en cas d'anomalies (workflow analyse)
+
+---
+
+### 4. Configuration Google Sheets OAuth2 (DONE)
+
+**Date** : 5 mai 2026
+
+#### Étape 1 : Google Cloud Console
+
+1. Aller sur https://console.cloud.google.com/
+2. Créer un projet (ou utiliser existant)
+3. Activer les APIs :
+   - **Google Sheets API**
+   - **Google Drive API** (requis pour lister les documents)
+
+#### Étape 2 : Créer les credentials OAuth2
+
+1. **APIs & Services** > **Credentials** > **Create Credentials** > **OAuth client ID**
+2. Configurer l'écran de consentement OAuth si demandé :
+   - Type : **External** (ou Internal si Google Workspace)
+   - Ajouter les emails autorisés dans "Test users"
+3. Type d'application : **Web application**
+4. **Origines JavaScript autorisées** : `https://ton-domaine-n8n.com` (optionnel)
+5. **URI de redirection autorisés** : `https://ton-domaine-n8n.com/rest/oauth2-credential/callback`
+6. Récupérer le **Client ID** et **Client Secret**
+
+#### Étape 3 : Configurer dans n8n
+
+1. **Credentials** > **Add Credential** > **Google Sheets OAuth2 API**
+2. Entrer Client ID et Client Secret
+3. Cliquer **Sign in with Google** et autoriser
+4. Sauvegarder
+
+#### Étape 4 : Configurer le noeud Google Sheets
+
+Dans le workflow "Declarations summary" :
+1. Ouvrir le noeud **Google Sheets - Append**
+2. Sélectionner le credential créé
+3. Sélectionner le **Document** cible
+4. Sélectionner la **Feuille**
+5. Mode : **Append Row**
+
+#### Erreurs courantes
+
+| Erreur | Solution |
+|--------|----------|
+| "Access blocked: X can only be used within its organization" | Passer l'app en mode **External** dans OAuth consent screen |
+| "Google Drive API has not been used" | Activer l'API Google Drive dans le projet |
+| Workflow succès mais rien inséré | Vérifier que documentId et sheetName sont configurés dans le noeud |
 
 ---
 

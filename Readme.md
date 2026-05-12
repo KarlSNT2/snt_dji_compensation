@@ -402,9 +402,12 @@ Retourne toutes les lignes declarees de toutes les declarations, avec infos clie
       "prix_vente_ttc": 139,
       "prix_promo_ttc": 115,
       "compensation_ht": 14.4,
+      "total_compensation_ht": 144.0,
       "date_debut": "2026-01-01",
       "date_fin": "2026-01-31",
-      "date_butoir": "2026-02-06"
+      "date_butoir": "2026-02-06",
+      "numero_serie": "SN123456789",
+      "reference_avoir": "AV-2026-001"
     }
   ]
 }
@@ -499,3 +502,45 @@ Workflow pour exporter les declarations agregees par promotion et client :
 
 **Colonnes suggerees** :
 | Reference | Produit | EAN | Date debut | Date fin | Client | SIRET | Qte declaree | Compensation HT | Nb declarations |
+
+### Configuration Google Sheets OAuth2
+
+Pour connecter n8n a Google Sheets, suivre ces etapes :
+
+#### 1. Google Cloud Console
+
+1. Creer un projet sur https://console.cloud.google.com/
+2. Activer les APIs requises :
+   - **Google Sheets API**
+   - **Google Drive API**
+
+#### 2. Creer les credentials OAuth2
+
+1. **APIs & Services** > **Credentials** > **Create Credentials** > **OAuth client ID**
+2. Configurer l'ecran de consentement OAuth :
+   - Type : **External**
+   - Ajouter les emails autorises dans "Test users"
+3. Type d'application : **Web application**
+4. **URI de redirection autorises** : `https://[votre-n8n]/rest/oauth2-credential/callback`
+5. Noter le **Client ID** et **Client Secret**
+
+#### 3. Configurer dans n8n
+
+1. **Credentials** > **Add Credential** > **Google Sheets OAuth2 API**
+2. Entrer Client ID et Client Secret
+3. Cliquer **Sign in with Google** et autoriser l'acces
+
+#### 4. Configurer le workflow
+
+Dans le noeud **Google Sheets** :
+1. Selectionner le credential cree
+2. Selectionner le document et la feuille cibles
+3. Mode : **Append Row**
+
+#### Erreurs courantes
+
+| Erreur | Solution |
+|--------|----------|
+| "Access blocked: X can only be used within its organization" | Passer l'app en mode **External** dans OAuth consent screen |
+| "Google Drive API has not been used" | Activer l'API Google Drive dans le projet Google Cloud |
+| Workflow OK mais rien insere | Verifier que le document et la feuille sont selectionnes dans le noeud |

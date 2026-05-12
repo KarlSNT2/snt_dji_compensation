@@ -39,7 +39,7 @@ class Snt_dji_compensation extends Module
     {
         $this->name = 'snt_dji_compensation';
         $this->tab = 'administration';
-        $this->version = '1.0.0';
+        $this->version = '1.1.0';
         $this->author = 'SNT2';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -135,6 +135,11 @@ class Snt_dji_compensation extends Module
             $output .= $this->processTemplateUpload();
         }
 
+        // Restaurer un ancien template
+        if (Tools::isSubmit('restoreTemplate')) {
+            $output .= $this->processRestoreTemplate();
+        }
+
         // Configuration S3
         if (Tools::isSubmit('submitS3Config')) {
             $this->processS3Config();
@@ -169,6 +174,12 @@ class Snt_dji_compensation extends Module
             'declarations_link' => $this->context->link->getAdminLink('AdminDJICompensation'),
             'template_file' => Configuration::get('SNT_DJI_COMPENSATION_TEMPLATE_FILE'),
             'has_template' => $this->hasTemplate(),
+            'template_history' => $this->getTemplateHistory(),
+            'configure_link' => $this->context->link->getAdminLink('AdminModules', true, [], [
+                'configure' => $this->name,
+                'tab_module' => $this->tab,
+                'module_name' => $this->name,
+            ]),
         ]);
 
         $output .= $this->context->smarty->fetch($this->local_path . 'views/templates/admin/configure.tpl');
@@ -462,14 +473,23 @@ class Snt_dji_compensation extends Module
         $uploadDir = _PS_MODULE_DIR_ . $this->name . '/uploads/templates/';
         $filename = 'template_dji_' . date('Y-m-d_His') . '.xlsx';
 
-        // Supprimer l'ancien fichier
-        $oldFile = Configuration::get('SNT_DJI_COMPENSATION_TEMPLATE_FILE');
-        if ($oldFile && file_exists($uploadDir . $oldFile)) {
-            unlink($uploadDir . $oldFile);
-        }
+        // Desactiver l'ancien template dans l'historique (sans supprimer le fichier)
+        Db::getInstance()->update('dji_compensation_template_history', ['is_active' => 0], 'is_active = 1');
 
         if (move_uploaded_file($file['tmp_name'], $uploadDir . $filename)) {
             Configuration::updateValue('SNT_DJI_COMPENSATION_TEMPLATE_FILE', $filename);
+
+            // Ajouter le nouveau template a l'historique
+            $idEmployee = $this->context->employee ? (int) $this->context->employee->id : null;
+            Db::getInstance()->insert('dji_compensation_template_history', [
+                'filename' => pSQL($filename),
+                'original_filename' => pSQL($file['name']),
+                'file_size' => (int) $file['size'],
+                'is_active' => 1,
+                'id_employee' => $idEmployee,
+                'date_add' => date('Y-m-d H:i:s'),
+            ]);
+
             return $this->displayConfirmation($this->l('Template XLSX mis a jour avec succes.'));
         }
 
@@ -613,5 +633,85 @@ class Snt_dji_compensation extends Module
     {
         $filename = Configuration::get('SNT_DJI_COMPENSATION_TEMPLATE_FILE');
         return _PS_MODULE_DIR_ . $this->name . '/uploads/templates/' . $filename;
+    }
+
+    /**
+     * Recupere l'historique des templates
+     */
+    public function getTemplateHistory()
+    {
+        $sql = 'SELECT th.*, e.firstname, e.lastname
+                FROM `' . _DB_PREFIX_ . 'dji_compensation_template_history` th
+                LEFT JOIN `' . _DB_PREFIX_ . 'employee` e ON th.id_employee = e.id_employee
+                ORDER BY th.date_add DESC
+                LIMIT 20';
+
+        $history = Db::getInstance()->executeS($sql);
+        if (!$history) {
+            return [];
+        }
+
+        $uploadDir = _PS_MODULE_DIR_ . $this->name . '/uploads/templates/';
+        foreach ($history as &$item) {
+            $item['file_exists'] = file_exists($uploadDir . $item['filename']);
+            $item['file_size_formatted'] = $this->formatFileSize($item['file_size']);
+            $item['employee_name'] = $item['firstname'] && $item['lastname']
+                ? $item['firstname'] . ' ' . $item['lastname']
+                : $this->l('Systeme');
+        }
+
+        return $history;
+    }
+
+    /**
+     * Restaure un ancien template
+     */
+    protected function processRestoreTemplate()
+    {
+        $idTemplate = (int) Tools::getValue('id_template');
+        if (!$idTemplate) {
+            return $this->displayError($this->l('Template non specifie.'));
+        }
+
+        $template = Db::getInstance()->getRow(
+            'SELECT * FROM `' . _DB_PREFIX_ . 'dji_compensation_template_history`
+             WHERE id_template = ' . $idTemplate
+        );
+
+        if (!$template) {
+            return $this->displayError($this->l('Template non trouve.'));
+        }
+
+        $uploadDir = _PS_MODULE_DIR_ . $this->name . '/uploads/templates/';
+        if (!file_exists($uploadDir . $template['filename'])) {
+            return $this->displayError($this->l('Le fichier template n\'existe plus sur le serveur.'));
+        }
+
+        // Desactiver tous les templates
+        Db::getInstance()->update('dji_compensation_template_history', ['is_active' => 0], '1');
+
+        // Activer le template selectionne
+        Db::getInstance()->update('dji_compensation_template_history', ['is_active' => 1], 'id_template = ' . $idTemplate);
+
+        // Mettre a jour la configuration
+        Configuration::updateValue('SNT_DJI_COMPENSATION_TEMPLATE_FILE', $template['filename']);
+
+        return $this->displayConfirmation(sprintf(
+            $this->l('Template "%s" restaure avec succes.'),
+            $template['original_filename']
+        ));
+    }
+
+    /**
+     * Formate une taille de fichier
+     */
+    protected function formatFileSize($bytes)
+    {
+        if ($bytes >= 1048576) {
+            return number_format($bytes / 1048576, 2) . ' Mo';
+        } elseif ($bytes >= 1024) {
+            return number_format($bytes / 1024, 2) . ' Ko';
+        }
+        return $bytes . ' octets';
     }
 }
