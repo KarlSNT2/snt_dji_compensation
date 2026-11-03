@@ -1,0 +1,212 @@
+{
+  "name": "Insert Actual Promotions",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Synchro promotions_dji\nSource : template **actif** du back-office (`action=template`).\n\n**Declencheurs**\n- Webhook : appele par le module a chaque upload / restauration du template (URL de production a coller dans Module > Configuration API).\n- Cron 5h : filet de securite si le webhook a echoue.\n- Manuel : tests.\n\n**UPSERT, jamais de TRUNCATE** : une promo retiree du template reste en base pour les declarations tardives. Cle = (reference_article, date_debut, date_fin), index `uq_promo_ref_dates` (scripts-sql/08).\n\nSi le template est illisible ou vide, le Code echoue AVANT toute ecriture.",
+        "height": 420,
+        "width": 520
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        96
+      ],
+      "id": "66d3707f-0e47-4240-8327-2fa64388b76e",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dji-promotions-sync",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        560,
+        80
+      ],
+      "id": "db7abf49-e582-4245-b780-361779e4a636",
+      "name": "Webhook template actif",
+      "webhookId": "3812a6d1-63aa-4ee5-a123-74e764031d30",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KkrwVjBPAwY2R6Zw",
+          "name": "DJI COMPENSATION PROD"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        560,
+        464
+      ],
+      "id": "f23a7fa2-3006-4799-a449-dcafbc619a08",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "url": "https://store.sts-distribution.com/index.php?fc=module&module=snt_dji_compensation&controller=api&action=template",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        832,
+        272
+      ],
+      "id": "98de5de9-e50c-4e45-8947-193466b73945",
+      "name": "GET Template actif",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "Qaxzkse7L04xyZ8I",
+          "name": "Module API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mappe les lignes du template actif vers promotions_dji.\n// Sortie : UN seul item portant toutes les lignes en JSON ($json.payload), que\n// le node Postgres deplie avec jsonb_to_recordset en une seule requete.\n\n// Date Excel (numero de serie) ou texte JJ/MM/AAAA / AAAA-MM-JJ -> 'AAAA-MM-JJ'\nfunction toISODate(v) {\n  if (v === null || v === undefined || v === '') return null;\n  const s = String(v).trim();\n  if (/^\\d+(\\.\\d+)?$/.test(s)) {\n    const d = new Date(Math.round((Math.floor(Number(s)) - 25569) * 86400 * 1000));\n    return isNaN(d) ? null : d.toISOString().slice(0, 10);\n  }\n  let m = s.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);\n  if (m) return `${m[1]}-${m[2]}-${m[3]}`;\n  m = s.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})$/);\n  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;\n  return null;\n}\nfunction parseNumber(v) {\n  if (v === null || v === undefined || v === '') return null;\n  const n = parseFloat(String(v).replace(',', '.').replace(/[^\\d.-]/g, ''));\n  return isNaN(n) ? null : n;\n}\nfunction cleanString(v) {\n  if (v === null || v === undefined) return null;\n  const c = String(v).trim();\n  return c === '' ? null : c;\n}\n// Normalise un en-tete : retours ligne, espaces multiples, apostrophes, casse\nconst norm = s => String(s || '').replace(/[‘’]/g, \"'\").replace(/\\s+/g, ' ').trim().toLowerCase();\n// Valeur de la premiere colonne dont l'en-tete vaut ou commence par l'un des alias\nfunction col(row, ...aliases) {\n  const keys = Object.keys(row);\n  for (const a of aliases.map(norm)) {\n    const k = keys.find(k => norm(k) === a) || keys.find(k => norm(k).startsWith(a));\n    if (k !== undefined) return row[k];\n  }\n  return null;\n}\n\nconst res = $input.first().json;\nif (!res || res.success !== true || !Array.isArray(res.data)) {\n  // On s'arrete AVANT toute ecriture : la table reste telle quelle.\n  throw new Error('Reponse template invalide : ' + JSON.stringify(res).slice(0, 300));\n}\n\n// Cle = trio de l'index unique. Deux lignes du fichier sur la meme cle feraient\n// echouer l'upsert (\"ON CONFLICT DO UPDATE command cannot affect row a second\n// time\") : la derniere du fichier l'emporte.\nconst byKey = new Map();\nconst sansDateDebut = [];\nlet lignesLues = 0;\n\nfor (const row of res.data) {\n  const produit = cleanString(col(row, 'Produit'));\n  const reference = cleanString(col(row, 'Référence produit - STS'));\n  if (!produit || !reference) continue;\n  lignesLues++;\n\n  const dateDebut = toISODate(col(row, 'Date de début'));\n  if (!dateDebut) {\n    sansDateDebut.push(reference);\n    continue;\n  }\n  const dateFin = toISODate(col(row, 'Date de fin'));\n\n  byKey.set(`${reference}|${dateDebut}|${dateFin || ''}`, {\n    statut: cleanString(col(row, 'Statut')),\n    type_promotion: cleanString(col(row, \"Type d'opération\", 'Type de promotion')),\n    produit,\n    ean: cleanString(col(row, 'EAN Produit')),\n    reference_article: reference,\n    date_debut: dateDebut,\n    date_fin: dateFin,\n    prix_vente_ttc: parseNumber(col(row, 'Prix de vente TTC')),\n    nouveau_prix_ttc: parseNumber(col(row, 'Prix Promo TTC')),\n    difference: parseNumber(col(row, 'Baisse de prix')),\n    compensation_ht: parseNumber(col(row, 'Compensation €HT')),\n    date_butoir_declaration: toISODate(col(row, 'Date butoir de déclaration')),\n    mise_a_jour: toISODate(col(row, 'Mise à Jour')),\n    declaration_sts_dji: cleanString(col(row, 'Déclaration de STS à DJI')),\n  });\n}\n\nconst rows = [...byKey.values()];\nif (rows.length === 0) {\n  throw new Error('Aucune promotion lue dans le template (' + res.filename + ') : table laissee intacte');\n}\n\nreturn [{\n  json: {\n    template: res.filename,\n    lignes_lues: lignesLues,\n    promos_uniques: rows.length,\n    doublons_fichier: lignesLues - sansDateDebut.length - rows.length,\n    sans_date_debut: sansDateDebut,\n    payload: JSON.stringify(rows),\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        272
+      ],
+      "id": "3f296c84-db18-4ba0-9e25-de9f82d91670",
+      "name": "Map promotions"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH src AS (\n    SELECT *\n    FROM jsonb_to_recordset($1::jsonb) AS x(\n        statut                  text,\n        type_promotion          text,\n        produit                 text,\n        ean                     text,\n        reference_article       text,\n        date_debut              date,\n        date_fin                date,\n        prix_vente_ttc          numeric,\n        nouveau_prix_ttc        numeric,\n        difference              numeric,\n        compensation_ht         numeric,\n        date_butoir_declaration date,\n        mise_a_jour             date,\n        declaration_sts_dji     text\n    )\n),\nup AS (\n    INSERT INTO public.promotions_dji AS p (\n        statut, type_promotion, produit, ean, reference_article,\n        date_debut, date_fin, prix_vente_ttc, nouveau_prix_ttc, difference,\n        compensation_ht, date_butoir_declaration, mise_a_jour, declaration_sts_dji\n    )\n    SELECT\n        statut, type_promotion, produit, ean, reference_article,\n        date_debut, date_fin, prix_vente_ttc, nouveau_prix_ttc, difference,\n        compensation_ht, date_butoir_declaration, mise_a_jour, declaration_sts_dji\n    FROM src\n    -- Doit correspondre a l'index uq_promo_ref_dates (scripts-sql/08).\n    ON CONFLICT (reference_article, date_debut, (COALESCE(date_fin, '9999-12-31'::date)))\n    DO UPDATE SET\n        statut                  = EXCLUDED.statut,\n        type_promotion          = EXCLUDED.type_promotion,\n        produit                 = EXCLUDED.produit,\n        ean                     = EXCLUDED.ean,\n        prix_vente_ttc          = EXCLUDED.prix_vente_ttc,\n        nouveau_prix_ttc        = EXCLUDED.nouveau_prix_ttc,\n        difference              = EXCLUDED.difference,\n        compensation_ht         = EXCLUDED.compensation_ht,\n        date_butoir_declaration = EXCLUDED.date_butoir_declaration,\n        mise_a_jour             = EXCLUDED.mise_a_jour,\n        declaration_sts_dji     = EXCLUDED.declaration_sts_dji,\n        updated_at              = NOW()\n    -- Une ligne identique n'est pas reecrite : updated_at garde la date du\n    -- dernier vrai changement.\n    WHERE (p.statut, p.type_promotion, p.produit, p.ean, p.prix_vente_ttc,\n           p.nouveau_prix_ttc, p.difference, p.compensation_ht,\n           p.date_butoir_declaration, p.mise_a_jour, p.declaration_sts_dji)\n          IS DISTINCT FROM\n          (EXCLUDED.statut, EXCLUDED.type_promotion, EXCLUDED.produit, EXCLUDED.ean,\n           EXCLUDED.prix_vente_ttc, EXCLUDED.nouveau_prix_ttc, EXCLUDED.difference,\n           EXCLUDED.compensation_ht, EXCLUDED.date_butoir_declaration,\n           EXCLUDED.mise_a_jour, EXCLUDED.declaration_sts_dji)\n    RETURNING (xmax = 0) AS inseree\n)\nSELECT\n    (SELECT count(*) FROM src)                     AS lignes_envoyees,\n    count(*) FILTER (WHERE inseree)                AS inserees,\n    count(*) FILTER (WHERE NOT inseree)            AS mises_a_jour,\n    (SELECT count(*) FROM src) - count(*)          AS inchangees\nFROM up;",
+        "options": {
+          "queryReplacement": "={{ [$json.payload] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1312,
+        272
+      ],
+      "id": "4285c9db-f875-42fc-9c59-60c93ed3d43f",
+      "name": "Upsert promotions_dji",
+      "credentials": {
+        "postgres": {
+          "id": "S4K1CxlHRmNEsUuM",
+          "name": "APP Metier Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        272
+      ],
+      "id": "6483dfaa-8267-43e5-8ec7-acd374957d64",
+      "name": "Chaque 15min"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook template actif": {
+      "main": [
+        [
+          {
+            "node": "GET Template actif",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "GET Template actif",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Template actif": {
+      "main": [
+        [
+          {
+            "node": "Map promotions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map promotions": {
+      "main": [
+        [
+          {
+            "node": "Upsert promotions_dji",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chaque 15min": {
+      "main": [
+        [
+          {
+            "node": "GET Template actif",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "dda6bc8a-5974-496b-b37c-6b16c0b5107d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "10abab15e1cddf9784b936b459605c273cea23a2036f073d0ae4b8f7b6e309cf"
+  },
+  "id": "UeZlt2jABW93CnZF",
+  "tags": [
+    {
+      "updatedAt": "2026-09-18T09:32:00.573Z",
+      "createdAt": "2026-09-18T09:32:00.573Z",
+      "id": "IWSq4SNcCWnU6q48",
+      "name": "DONE"
+    }
+  ]
+}

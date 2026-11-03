@@ -27,6 +27,7 @@
 require_once _PS_MODULE_DIR_ . 'snt_dji_compensation/classes/DJICompensationDeclaration.php';
 require_once _PS_MODULE_DIR_ . 'snt_dji_compensation/classes/DJICompensationInvoice.php';
 require_once _PS_MODULE_DIR_ . 'snt_dji_compensation/classes/DJICompensationStockProof.php';
+require_once _PS_MODULE_DIR_ . 'snt_dji_compensation/classes/DJICompensationHistory.php';
 
 class AdminDJICompensationController extends ModuleAdminController
 {
@@ -76,7 +77,12 @@ class AdminDJICompensationController extends ModuleAdminController
                 'callback' => 'displayStatus',
             ],
             'date_add' => [
-                'title' => $this->l('Date'),
+                'title' => $this->l('Creation'),
+                'type' => 'datetime',
+                'align' => 'center',
+            ],
+            'date_upd' => [
+                'title' => $this->l('Derniere action'),
                 'type' => 'datetime',
                 'align' => 'center',
             ],
@@ -113,6 +119,7 @@ class AdminDJICompensationController extends ModuleAdminController
             'draft' => 'default',
             'submitted' => 'info',
             'processing' => 'warning',
+            'registered' => 'default',
             'validated' => 'success',
             'rejected' => 'danger',
         ];
@@ -135,11 +142,19 @@ class AdminDJICompensationController extends ModuleAdminController
         $invoices = DJICompensationInvoice::getByDeclaration($declaration->id);
         $stockProofs = DJICompensationStockProof::getByDeclaration($declaration->id);
 
+        $history = DJICompensationHistory::getByDeclaration($declaration->id, 'DESC');
+        foreach ($history as &$row) {
+            $row['action_label'] = DJICompensationHistory::getActionLabel($row['action']);
+            $row['actor_type_label'] = DJICompensationHistory::getActorTypeLabel($row['actor_type']);
+        }
+        unset($row);
+
         $this->context->smarty->assign([
             'declaration' => $declaration,
             'customer' => $customer,
             'invoices' => $invoices,
             'stock_proofs' => $stockProofs,
+            'history' => $history,
             'statuses' => DJICompensationDeclaration::getStatuses(),
             'back_link' => $this->context->link->getAdminLink('AdminDJICompensation'),
             'ajax_url' => $this->context->link->getAdminLink('AdminDJICompensation'),
@@ -163,12 +178,36 @@ class AdminDJICompensationController extends ModuleAdminController
             die(json_encode(['success' => false, 'message' => $this->l('Statut invalide')]));
         }
 
+        $oldStatus = $declaration->status;
         $declaration->status = $status;
         if ($declaration->save()) {
+            if ($oldStatus !== $status) {
+                $labels = DJICompensationDeclaration::getStatuses();
+                $details = ($labels[$oldStatus] ?? $oldStatus) . ' -> ' . ($labels[$status] ?? $status);
+                $this->logEmployeeHistory($declaration->id, DJICompensationHistory::ACTION_STATUS_CHANGED, $details);
+            }
             die(json_encode(['success' => true, 'message' => $this->l('Statut mis a jour')]));
         }
 
         die(json_encode(['success' => false, 'message' => $this->l('Erreur')]));
+    }
+
+    /**
+     * Enregistre une action de l'employe dans l'historique d'une declaration
+     */
+    protected function logEmployeeHistory($idDeclaration, $action, $details = null)
+    {
+        $employee = $this->context->employee;
+        $actorName = $employee ? trim($employee->firstname . ' ' . $employee->lastname) : '';
+
+        DJICompensationHistory::log(
+            $idDeclaration,
+            $action,
+            $details,
+            DJICompensationHistory::ACTOR_EMPLOYEE,
+            $employee ? (int) $employee->id : 0,
+            $actorName
+        );
     }
 
     public function ajaxProcessUpdateNotes()

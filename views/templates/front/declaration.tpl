@@ -38,10 +38,12 @@
                 <div class="row align-items-center">
                     <div class="col-md-8">
                         <h5>{l s='Fichier de declaration DJI' mod='snt_dji_compensation'}</h5>
-                        <p class="mb-0">{l s='Telechargez le fichier Excel, remplissez vos ventes, puis deposez-le ci-dessous avec vos factures.' mod='snt_dji_compensation'}</p>
+                        <p class="mb-0">
+                            {l s='Telechargez le fichier Excel, remplissez vos ventes, puis deposez-le ci-dessous avec vos factures.' mod='snt_dji_compensation'}
+                        </p>
                     </div>
                     <div class="col-md-4 text-md-right mt-3 mt-md-0">
-                        <a href="{$download_link}" class="btn btn-success btn-lg">
+                        <a href="{$download_link}" class="btn btn-success btn-lg" data-dji-template-download>
                             <i class="material-icons">download</i>
                             {l s='Telecharger le template' mod='snt_dji_compensation'}
                         </a>
@@ -88,11 +90,15 @@
                                             <span class="badge badge-{$history.status_class}">{$history.status_label}</span>
                                         </td>
                                         <td>
-                                            <a href="{$link->getModuleLink('snt_dji_compensation', 'declaration', ['view' => $history.id_declaration])}" class="btn btn-sm btn-outline-secondary" title="{l s='Consulter' mod='snt_dji_compensation'}">
+                                            <a href="{$link->getModuleLink('snt_dji_compensation', 'declaration', ['view' => $history.id_declaration])}"
+                                                class="btn btn-sm btn-outline-secondary"
+                                                title="{l s='Consulter' mod='snt_dji_compensation'}">
                                                 <i class="material-icons" style="font-size:16px;">visibility</i>
                                             </a>
                                             {if $history.status == 'draft' || $history.status == 'submitted' || $history.status == 'processing'}
-                                                <a href="{$link->getModuleLink('snt_dji_compensation', 'declaration', ['edit' => $history.id_declaration])}" class="btn btn-sm btn-outline-primary" title="{l s='Modifier' mod='snt_dji_compensation'}">
+                                                <a href="{$link->getModuleLink('snt_dji_compensation', 'declaration', ['edit' => $history.id_declaration])}"
+                                                    class="btn btn-sm btn-outline-primary"
+                                                    title="{l s='Modifier' mod='snt_dji_compensation'}">
                                                     <i class="material-icons" style="font-size:16px;">edit</i>
                                                 </a>
                                             {/if}
@@ -113,7 +119,11 @@
                     {if $declaration}
                         <i class="material-icons">edit</i>
                         {if $declaration->status == 'draft'}
-                            {l s='Brouillon en cours' mod='snt_dji_compensation'}
+                            {if $draft_enabled}
+                                {l s='Brouillon en cours' mod='snt_dji_compensation'}
+                            {else}
+                                {l s='Declaration en cours' mod='snt_dji_compensation'}
+                            {/if}
                         {else}
                             {l s='Modification de declaration' mod='snt_dji_compensation'}
                         {/if}
@@ -144,7 +154,8 @@
                                         {$declaration->xlsx_original_filename|escape:'html':'UTF-8'}
                                     </span>
                                     {if $xlsx_url}
-                                        <a href="{$xlsx_url}" class="btn btn-sm btn-success" target="_blank" title="{l s='Telecharger' mod='snt_dji_compensation'}">
+                                        <a href="{$xlsx_url}" class="btn btn-sm btn-success" target="_blank"
+                                            title="{l s='Telecharger' mod='snt_dji_compensation'}">
                                             <i class="material-icons" style="font-size:16px;vertical-align:middle;">download</i>
                                             {l s='Telecharger' mod='snt_dji_compensation'}
                                         </a>
@@ -185,22 +196,30 @@
                         <div class="card-body">
                             {if $invoices|count > 0}
                                 <div class="existing-files mb-3" id="invoices-list">
-                                    <strong>{l s='Factures deja envoyees :' mod='snt_dji_compensation'} (<span class="invoices-count">{$invoices|count}</span>)</strong>
+                                    <strong>{l s='Factures deja envoyees :' mod='snt_dji_compensation'} (<span
+                                            class="invoices-count">{$invoices|count}</span>)</strong>
                                     <ul class="list-group mt-2">
                                         {foreach from=$invoices item=invoice}
-                                            <li class="list-group-item d-flex justify-content-between align-items-center py-2" data-invoice-id="{$invoice.id_invoice}">
+                                            <li class="list-group-item d-flex justify-content-between align-items-center py-2"
+                                                data-invoice-id="{$invoice.id_invoice}">
                                                 <span>
-                                                    <i class="material-icons text-danger" style="font-size:18px;vertical-align:middle;">picture_as_pdf</i>
+                                                    <i class="material-icons text-danger"
+                                                        style="font-size:18px;vertical-align:middle;">picture_as_pdf</i>
                                                     {$invoice.original_filename|escape:'html':'UTF-8'}
                                                 </span>
                                                 <span>
-                                                    <span class="badge badge-secondary mr-2">{($invoice.file_size/1024)|string_format:"%.0f"} Ko</span>
+                                                    <span
+                                                        class="badge badge-secondary mr-2">{($invoice.file_size/1024)|string_format:"%.0f"}
+                                                        Ko</span>
                                                     {if $invoice.presigned_url}
-                                                        <a href="{$invoice.presigned_url}" class="btn btn-sm btn-outline-primary mr-1" target="_blank" title="{l s='Telecharger' mod='snt_dji_compensation'}">
+                                                        <a href="{$invoice.presigned_url}" class="btn btn-sm btn-outline-primary mr-1"
+                                                            target="_blank" title="{l s='Telecharger' mod='snt_dji_compensation'}">
                                                             <i class="material-icons" style="font-size:16px;">download</i>
                                                         </a>
                                                     {/if}
-                                                    <button type="button" class="btn btn-sm btn-outline-danger delete-invoice-btn" data-id="{$invoice.id_invoice}" title="{l s='Supprimer' mod='snt_dji_compensation'}">
+                                                    <button type="button" class="btn btn-sm btn-outline-danger delete-invoice-btn"
+                                                        data-id="{$invoice.id_invoice}"
+                                                        title="{l s='Supprimer' mod='snt_dji_compensation'}">
                                                         <i class="material-icons" style="font-size:16px;">delete</i>
                                                     </button>
                                                 </span>
@@ -211,7 +230,8 @@
                             {/if}
 
                             <div class="dropzone-container dropzone-multiple" id="invoices-dropzone">
-                                <input type="file" id="invoices" name="invoices[]" accept=".pdf" multiple class="dropzone-input">
+                                <input type="file" id="invoices" name="invoices[]" accept=".pdf" multiple
+                                    class="dropzone-input">
                                 <div class="dropzone-content">
                                     <i class="material-icons">picture_as_pdf</i>
                                     <p>{l s='Glissez vos factures PDF ici' mod='snt_dji_compensation'}</p>
@@ -220,7 +240,8 @@
                                 <div class="dropzone-preview" id="invoices-preview"></div>
                             </div>
                             <small class="form-text text-muted mt-2">
-                                {l s='Format : PDF. Max' mod='snt_dji_compensation'} {$max_invoices} {l s='fichiers,' mod='snt_dji_compensation'} {$max_file_size} Mo/fichier
+                                {l s='Format : PDF. Max' mod='snt_dji_compensation'} {$max_invoices}
+                                {l s='fichiers,' mod='snt_dji_compensation'} {$max_file_size} Mo/fichier
                             </small>
                         </div>
                     </div>
@@ -234,40 +255,45 @@
                             </h6>
                         </div>
                         <div class="card-body">
-                            <div class="form-group">
-                                <div class="custom-control custom-checkbox">
-                                    <input type="checkbox" class="custom-control-input" id="has_mic_power_products" name="has_mic_power_products" value="1" {if $declaration && $declaration->has_mic_power_products}checked{/if}>
-                                    <label class="custom-control-label" for="has_mic_power_products">
-                                        {l s='Ma declaration contient des produits DJI Mic ou DJI Power' mod='snt_dji_compensation'}
-                                    </label>
-                                </div>
-                            </div>
+                            <p class="mb-3">
+                                {l s='Ma declaration est une baisse de prix et/ou une promotion DJI Mic / DJI Power.' mod='snt_dji_compensation'}
+                            </p>
 
-                            <div id="stock-proofs-section" style="{if !$declaration || !$declaration->has_mic_power_products}display:none;{/if}">
+                            <div id="stock-proofs-section">
                                 <div class="alert alert-info">
                                     <i class="material-icons" style="font-size:18px;vertical-align:middle;">info</i>
-                                    {l s='Pour DJI Mic et Power, fournissez des photos de votre stock restant.' mod='snt_dji_compensation'}
+                                    {l s='Si votre declaration comporte des lignes baisse de prix, DJI Mic ou DJI Power, vous pouvez deposer ici vos photos de stock.' mod='snt_dji_compensation'}
                                 </div>
 
                                 {if $stock_proofs|count > 0}
                                     <div class="existing-files mb-3" id="stock-proofs-list">
-                                        <strong>{l s='Photos deja envoyees :' mod='snt_dji_compensation'} (<span class="stock-proofs-count">{$stock_proofs|count}</span>)</strong>
+                                        <strong>{l s='Photos deja envoyees :' mod='snt_dji_compensation'} (<span
+                                                class="stock-proofs-count">{$stock_proofs|count}</span>)</strong>
                                         <ul class="list-group mt-2">
                                             {foreach from=$stock_proofs item=proof}
-                                                <li class="list-group-item d-flex justify-content-between align-items-center py-2" data-stock-proof-id="{$proof.id_stock_proof}">
+                                                <li class="list-group-item d-flex justify-content-between align-items-center py-2"
+                                                    data-stock-proof-id="{$proof.id_stock_proof}">
                                                     <span>
-                                                        <i class="material-icons text-primary" style="font-size:18px;vertical-align:middle;">image</i>
+                                                        <i class="material-icons text-primary"
+                                                            style="font-size:18px;vertical-align:middle;">image</i>
                                                         {$proof.original_filename|escape:'html':'UTF-8'}
-                                                        <span class="badge badge-info ml-1">{if $proof.product_type == 'mic'}Mic{else}Power{/if}</span>
+                                                        <span
+                                                            class="badge badge-info ml-1">{if $proof.product_type == 'mic'}Mic{else}Power{/if}</span>
                                                     </span>
                                                     <span>
-                                                        <span class="badge badge-secondary mr-2">{($proof.file_size/1024)|string_format:"%.0f"} Ko</span>
+                                                        <span
+                                                            class="badge badge-secondary mr-2">{($proof.file_size/1024)|string_format:"%.0f"}
+                                                            Ko</span>
                                                         {if $proof.presigned_url}
-                                                            <a href="{$proof.presigned_url}" class="btn btn-sm btn-outline-primary mr-1" target="_blank" title="{l s='Telecharger' mod='snt_dji_compensation'}">
+                                                            <a href="{$proof.presigned_url}" class="btn btn-sm btn-outline-primary mr-1"
+                                                                target="_blank" title="{l s='Telecharger' mod='snt_dji_compensation'}">
                                                                 <i class="material-icons" style="font-size:16px;">download</i>
                                                             </a>
                                                         {/if}
-                                                        <button type="button" class="btn btn-sm btn-outline-danger delete-stock-proof-btn" data-id="{$proof.id_stock_proof}" title="{l s='Supprimer' mod='snt_dji_compensation'}">
+                                                        <button type="button"
+                                                            class="btn btn-sm btn-outline-danger delete-stock-proof-btn"
+                                                            data-id="{$proof.id_stock_proof}"
+                                                            title="{l s='Supprimer' mod='snt_dji_compensation'}">
                                                             <i class="material-icons" style="font-size:16px;">delete</i>
                                                         </button>
                                                     </span>
@@ -278,7 +304,8 @@
                                 {/if}
 
                                 <div class="dropzone-container dropzone-multiple" id="stock-proofs-dropzone">
-                                    <input type="file" id="stock_proofs" name="stock_proofs[]" accept="image/*" multiple class="dropzone-input">
+                                    <input type="file" id="stock_proofs" name="stock_proofs[]" accept="image/*" multiple
+                                        class="dropzone-input">
                                     <div class="dropzone-content">
                                         <i class="material-icons">add_photo_alternate</i>
                                         <p>{l s='Glissez vos photos ici' mod='snt_dji_compensation'}</p>
@@ -287,7 +314,8 @@
                                     <div class="dropzone-preview" id="stock-proofs-preview"></div>
                                 </div>
                                 <small class="form-text text-muted mt-2">
-                                    {l s='Formats : JPG, PNG, WebP. Max' mod='snt_dji_compensation'} {$max_stock_proofs} {l s='fichiers' mod='snt_dji_compensation'}
+                                    {l s='Formats : JPG, PNG, WebP. Max' mod='snt_dji_compensation'} {$max_stock_proofs}
+                                    {l s='fichiers' mod='snt_dji_compensation'}
                                 </small>
 
                                 <div id="stock-proofs-types" class="mt-3"></div>
@@ -303,14 +331,17 @@
                         </a>
 
                         <div>
-                            {if !$declaration || $declaration->status == 'draft'}
+                            {* Bouton pilote par Snt_dji_compensationDeclarationModuleFrontController::DRAFT_ENABLED *}
+                            {if $draft_enabled && (!$declaration || $declaration->status == 'draft')}
                                 <button type="submit" name="submitDeclaration" class="btn btn-secondary mb-2">
                                     <i class="material-icons">save</i>
                                     {l s='Enregistrer brouillon' mod='snt_dji_compensation'}
                                 </button>
                             {/if}
 
-                            <button type="submit" name="submitDeclaration" class="btn btn-primary mb-2 ml-2" onclick="document.querySelector('input[name=action]').value='submit';">
+                            <button type="submit" name="submitDeclaration" id="dji-submit-declaration"
+                                class="btn btn-primary mb-2 ml-2"
+                                onclick="document.querySelector('input[name=action]').value='submit';">
                                 <i class="material-icons">send</i>
                                 {if $declaration && $declaration->status != 'draft'}
                                     {l s='Mettre a jour' mod='snt_dji_compensation'}
@@ -324,6 +355,60 @@
                 </form>
             </div>
         </div>
+
+        {* Avertissement template obsolete.
+           Rendu uniquement si la derniere version telechargee par le client
+           differe du template actif. La soumission reste possible : le client
+           assume, et une declaration hors delai est de toute facon detectee
+           en aval par le flux n8n "Declarations summary". *}
+        {if $template_outdated}
+            <div class="dji-modal" id="dji-template-outdated-modal" hidden
+                role="dialog" aria-modal="true" aria-labelledby="dji-template-outdated-title">
+                <div class="dji-modal__backdrop" data-dji-modal-dismiss></div>
+                <div class="dji-modal__dialog" role="document">
+                    <div class="dji-modal__header">
+                        <i class="material-icons">warning</i>
+                        <h5 class="mb-0" id="dji-template-outdated-title">
+                            {l s='Attention : fichier de promotions obsolete' mod='snt_dji_compensation'}
+                        </h5>
+                    </div>
+                    <div class="dji-modal__body">
+                        <p>
+                            {l s='Le fichier de promotions que vous allez soumettre ne correspond pas a la derniere version mise en ligne.' mod='snt_dji_compensation'}
+                        </p>
+                        <ul class="dji-modal__facts">
+                            {if $template_downloaded_at}
+                                <li>
+                                    {l s='Votre telechargement :' mod='snt_dji_compensation'}
+                                    <strong>{$template_downloaded_at|date_format:'%d/%m/%Y %H:%M'}</strong>
+                                </li>
+                            {/if}
+                            {if $template_updated_at}
+                                <li>
+                                    {l s='Derniere mise a jour du fichier :' mod='snt_dji_compensation'}
+                                    <strong>{$template_updated_at|date_format:'%d/%m/%Y %H:%M'}</strong>
+                                </li>
+                            {/if}
+                        </ul>
+                        <p class="mb-0">
+                            {l s='Veuillez verifier que les promotions declarees sont toujours actives. Vous pouvez telecharger la derniere version, la completer et la redeposer, ou soumettre le fichier actuel : il sera traite tel quel.' mod='snt_dji_compensation'}
+                        </p>
+                    </div>
+                    <div class="dji-modal__footer">
+                        <a href="{$download_link}" class="btn btn-success" data-dji-template-download>
+                            <i class="material-icons">download</i>
+                            {l s='Telecharger la derniere version' mod='snt_dji_compensation'}
+                        </a>
+                        <button type="button" class="btn btn-outline-secondary" data-dji-modal-dismiss>
+                            {l s='Annuler' mod='snt_dji_compensation'}
+                        </button>
+                        <button type="button" class="btn btn-primary" id="dji-template-outdated-confirm">
+                            {l s='Soumettre quand meme' mod='snt_dji_compensation'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        {/if}
     </div>
 {/block}
 
@@ -345,47 +430,48 @@
             function handleDelete(type, id, listItem) {
                 var paramName = (type === 'invoice') ? 'id_invoice' : 'id_stock_proof';
                 var actionName = (type === 'invoice') ? 'deleteInvoice' : 'deleteStockProof';
-                var url = deleteAjaxUrl + urlSeparator + 'ajax=1&action=' + actionName + '&' + paramName + '=' + id + '&token=' + csrfToken + '&edit=' + declarationId;
+                var url = deleteAjaxUrl + urlSeparator + 'ajax=1&action=' + actionName + '&' + paramName + '=' + id +
+                    '&token=' + csrfToken + '&edit=' + declarationId;
 
                 console.log('Delete URL:', url);
 
                 fetch(url, {
-                    method: 'POST',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                })
-                .then(function(response) {
-                    if (!response.ok) {
-                        throw new Error('HTTP ' + response.status);
-                    }
-                    return response.text();
-                })
-                .then(function(text) {
-                    try {
-                        return JSON.parse(text);
-                    } catch (e) {
-                        console.error('Reponse non-JSON:', text);
-                        throw new Error('Reponse invalide du serveur');
-                    }
-                })
-                .then(function(data) {
-                    if (data.success) {
-                        listItem.remove();
-                        var countClass = (type === 'invoice') ? '.invoices-count' : '.stock-proofs-count';
-                        var listId = (type === 'invoice') ? 'invoices-list' : 'stock-proofs-list';
-                        var countEl = document.querySelector(countClass);
-                        if (countEl) countEl.textContent = data.count;
-                        if (data.count == 0) {
-                            var listContainer = document.getElementById(listId);
-                            if (listContainer) listContainer.remove();
+                        method: 'POST',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    })
+                    .then(function(response) {
+                        if (!response.ok) {
+                            throw new Error('HTTP ' + response.status);
                         }
-                    } else {
-                        alert(data.message || 'Erreur');
-                    }
-                })
-                .catch(function(err) {
-                    console.error('Erreur AJAX:', err);
-                    alert('Erreur: ' + err.message);
-                });
+                        return response.text();
+                    })
+                    .then(function(text) {
+                        try {
+                            return JSON.parse(text);
+                        } catch (e) {
+                            console.error('Reponse non-JSON:', text);
+                            throw new Error('Reponse invalide du serveur');
+                        }
+                    })
+                    .then(function(data) {
+                        if (data.success) {
+                            listItem.remove();
+                            var countClass = (type === 'invoice') ? '.invoices-count' : '.stock-proofs-count';
+                            var listId = (type === 'invoice') ? 'invoices-list' : 'stock-proofs-list';
+                            var countEl = document.querySelector(countClass);
+                            if (countEl) countEl.textContent = data.count;
+                            if (data.count == 0) {
+                                var listContainer = document.getElementById(listId);
+                                if (listContainer) listContainer.remove();
+                            }
+                        } else {
+                            alert(data.message || 'Erreur');
+                        }
+                    })
+                    .catch(function(err) {
+                        console.error('Erreur AJAX:', err);
+                        alert('Erreur: ' + err.message);
+                    });
             }
 
             function initDeleteButtons() {

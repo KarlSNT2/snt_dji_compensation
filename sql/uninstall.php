@@ -26,6 +26,8 @@
 
 $sql = array();
 
+$sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'dji_compensation_template_download`';
+$sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'dji_compensation_history`';
 $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'dji_compensation_template_history`';
 $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'dji_compensation_stock_proof`';
 $sql[] = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'dji_compensation_invoice`';

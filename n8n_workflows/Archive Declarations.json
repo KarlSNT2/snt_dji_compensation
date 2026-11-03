@@ -1,0 +1,642 @@
+{
+  "name": "Archive Declarations",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "triggerAtDayOfMonth": 8,
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "64857716-b612-45df-91f8-470e6ea4f1c6",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        160
+      ],
+      "id": "26d10cac-9178-4645-b01e-dac80dfe5c40",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT\n    to_char(periode, 'YYYY-MM-DD') AS periode,\n    CASE extract(month FROM periode)\n        WHEN 1  THEN 'Janvier'   WHEN 2  THEN 'Fevrier'  WHEN 3  THEN 'Mars'\n        WHEN 4  THEN 'Avril'     WHEN 5  THEN 'Mai'      WHEN 6  THEN 'Juin'\n        WHEN 7  THEN 'Juillet'   WHEN 8  THEN 'Aout'     WHEN 9  THEN 'Septembre'\n        WHEN 10 THEN 'Octobre'   WHEN 11 THEN 'Novembre' WHEN 12 THEN 'Decembre'\n    END || ' ' || to_char(periode, 'YYYY') || ' - DJI Compensations' AS archive_tab\nFROM public.declarations_export\nWHERE archived_at IS NULL\n  AND periode IS NOT NULL\n  AND periode < date_trunc('month', CURRENT_DATE)::date\nORDER BY 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        160
+      ],
+      "id": "aabb3bd1-262f-4055-8b73-7cb8ea282174",
+      "name": "Get Periods To Archive",
+      "credentials": {
+        "postgres": {
+          "id": "S4K1CxlHRmNEsUuM",
+          "name": "APP Metier Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        416,
+        160
+      ],
+      "id": "9a75a5c2-a763-49ba-8967-d0a6e3ab94ee",
+      "name": "Loop Periods"
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        656,
+        224
+      ],
+      "id": "15e040f0-c655-4afc-b020-45f039462719",
+      "name": "Create Archive Tab",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Bxr5KeBtUuqUegby",
+          "name": "Google Sheets account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "create",
+        "documentId": {
+          "__rl": true,
+          "value": "12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls",
+          "mode": "list",
+          "cachedResultName": "DJI Compensations",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls/edit?usp=drivesdk"
+        },
+        "title": "={{ $json.archive_tab }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        864,
+        224
+      ],
+      "id": "7ea3c673-6380-43e4-b24c-1d0c5886dffb",
+      "name": "Create Archive Tab1",
+      "credentials": {
+        "googleApi": {
+          "id": "cBgeJAmG4X37rfR8",
+          "name": "Google Service Account account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    declaration_reference, nom_du_client, type_de_promo, ref_article, designation,\n    to_char(date_debut, 'YYYY-MM-DD')               AS date_debut_txt,\n    to_char(date_fin,   'YYYY-MM-DD')               AS date_fin_txt,\n    quantite, compensation_ht, total, ref_avoir,\n    is_retard, is_doublon, doublon_de_reference,\n    to_char(doublon_de_date,  'DD/MM/YYYY')         AS doublon_de_date_txt,\n    to_char(date_declaration, 'DD/MM/YYYY HH24:MI') AS date_declaration_txt\nFROM public.declarations_export\nWHERE archived_at IS NULL\n  AND periode = $1::date\nORDER BY date_declaration, id;",
+        "options": {
+          "queryReplacement": "={{ $('Loop Periods').item.json.periode }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1056,
+        224
+      ],
+      "id": "d9c39a38-8ce4-4794-a202-43aad0118a3c",
+      "name": "Get Lines For Period",
+      "credentials": {
+        "postgres": {
+          "id": "S4K1CxlHRmNEsUuM",
+          "name": "APP Metier Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().filter(i => i.json && typeof i.json.is_doublon === 'boolean')\n.map(i => {\n  const r = i.json;\n\n  // Une ligne peut cumuler les deux anomalies.\n  const statut = [\n    r.is_retard  ? 'RETARD'  : null,\n    r.is_doublon ? 'DOUBLON' : null,\n  ].filter(Boolean).join(' + ');\n\n  const doublonDe = r.is_doublon\n    ? [r.doublon_de_reference, r.doublon_de_date_txt].filter(Boolean).join(' du ')\n    : '';\n\n  // Postgres renvoie les NUMERIC sous forme de chaine : on reconvertit pour que\n  // Google Sheets stocke un nombre et non du texte.\n  const num = (v) => (v === null || v === undefined || v === '') ? 0 : Number(v);\n\n  return {\n    json: {\n      'REF DECLARATION': r.declaration_reference || '',\n      'NOM DU CLIENT': r.nom_du_client || '',\n      'TYPE DE PROMO': r.type_de_promo || '',\n      'REF ARTICLE': r.ref_article || '',\n      'DESIGNATION': r.designation || '',\n      'DATE DEBUT': r.date_debut_txt || '',\n      'DATE FIN': r.date_fin_txt || '',\n      'QUANTITE': num(r.quantite),\n      'COMPENSATION HT': num(r.compensation_ht),\n      'TOTAL': num(r.total),\n      'REF AVOIR': r.ref_avoir || '',\n      'STATUT': statut,\n      'DOUBLON DE': doublonDe,\n      'DATE DECLARATION': r.date_declaration_txt || '',\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        224
+      ],
+      "id": "ac0c04a9-9697-4a99-9cf7-dd6940e1454b",
+      "name": "Format Archive Rows"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls",
+          "mode": "list",
+          "cachedResultName": "DJI Compensations",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Loop Periods').item.json.archive_tab }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1536,
+        224
+      ],
+      "id": "60c36fe3-cf60-43d4-a9c6-a171333e57d1",
+      "name": "Append To Archive Tab",
+      "credentials": {
+        "googleApi": {
+          "id": "cBgeJAmG4X37rfR8",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.declarations_export\nSET archived_at        = NOW(),\n    archive_period     = $1::date,\n    archive_sheet_name = $2::text\nWHERE archived_at IS NULL\n  AND periode = $1::date\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$('Loop Periods').item.json.periode, $('Loop Periods').item.json.archive_tab] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1728,
+        224
+      ],
+      "id": "07ae2c3c-a6ea-4693-a12d-94fac4c0f565",
+      "name": "Mark Archived",
+      "credentials": {
+        "postgres": {
+          "id": "S4K1CxlHRmNEsUuM",
+          "name": "APP Metier Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls",
+          "mode": "list",
+          "cachedResultName": "DJI Compensations",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1919104994,
+          "mode": "list",
+          "cachedResultName": "Feuille 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls/edit#gid=1919104994"
+        },
+        "keepFirstRow": true
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        928,
+        16
+      ],
+      "id": "16b31cae-6d31-4ecc-9026-df479a6a4b4a",
+      "name": "Clear sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "cBgeJAmG4X37rfR8",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    declaration_reference, nom_du_client, type_de_promo, ref_article, designation,\n    to_char(date_debut, 'YYYY-MM-DD')               AS date_debut_txt,\n    to_char(date_fin,   'YYYY-MM-DD')               AS date_fin_txt,\n    quantite, compensation_ht, total, ref_avoir,\n    is_retard, is_doublon, doublon_de_reference,\n    to_char(doublon_de_date,  'DD/MM/YYYY')         AS doublon_de_date_txt,\n    to_char(date_declaration, 'DD/MM/YYYY HH24:MI') AS date_declaration_txt\nFROM public.declarations_export\nWHERE archived_at IS NULL\nORDER BY date_declaration, id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        656,
+        16
+      ],
+      "id": "0c11dd98-e6ff-42b5-be47-f2b180b67141",
+      "name": "Get Remaining Lines",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "S4K1CxlHRmNEsUuM",
+          "name": "APP Metier Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all()\n  .filter(i => i.json && typeof i.json.is_doublon === 'boolean')\n  .map(i => {\n  const r = i.json;\n\n  const statut = [\n    r.is_retard  ? 'RETARD'  : null,\n    r.is_doublon ? 'DOUBLON' : null,\n  ].filter(Boolean).join(' + ');\n\n  const doublonDe = r.is_doublon\n    ? [r.doublon_de_reference, r.doublon_de_date_txt].filter(Boolean).join(' du ')\n    : '';\n\n  const num = (v) => (v === null || v === undefined || v === '') ? 0 : Number(v);\n\n  return {\n    json: {\n      'REF DECLARATION': r.declaration_reference || '',\n      'NOM DU CLIENT': r.nom_du_client || '',\n      'TYPE DE PROMO': r.type_de_promo || '',\n      'REF ARTICLE': r.ref_article || '',\n      'DESIGNATION': r.designation || '',\n      'DATE DEBUT': r.date_debut_txt || '',\n      'DATE FIN': r.date_fin_txt || '',\n      'QUANTITE': num(r.quantite),\n      'COMPENSATION HT': num(r.compensation_ht),\n      'TOTAL': num(r.total),\n      'REF AVOIR': r.ref_avoir || '',\n      'STATUT': statut,\n      'DOUBLON DE': doublonDe,\n      'DATE DECLARATION': r.date_declaration_txt || '',\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        16
+      ],
+      "id": "b199da02-d80e-449a-bd3a-29a5e7d6ac24",
+      "name": "Format Recap Rows"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls",
+          "mode": "list",
+          "cachedResultName": "DJI Compensations",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1919104994,
+          "mode": "list",
+          "cachedResultName": "Feuille 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls/edit#gid=1919104994"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "REF DECLARATION",
+              "displayName": "REF DECLARATION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "NOM DU CLIENT",
+              "displayName": "NOM DU CLIENT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "TYPE DE PROMO",
+              "displayName": "TYPE DE PROMO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "REF ARTICLE",
+              "displayName": "REF ARTICLE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DESIGNATION",
+              "displayName": "DESIGNATION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DATE DEBUT",
+              "displayName": "DATE DEBUT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DATE FIN",
+              "displayName": "DATE FIN",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "QUANTITE",
+              "displayName": "QUANTITE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "COMPENSATION HT",
+              "displayName": "COMPENSATION HT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "TOTAL",
+              "displayName": "TOTAL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "REF AVOIR",
+              "displayName": "REF AVOIR",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "STATUT",
+              "displayName": "STATUT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DOUBLON DE",
+              "displayName": "DOUBLON DE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DATE DECLARATION",
+              "displayName": "DATE DECLARATION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1344,
+        16
+      ],
+      "id": "6535a915-df6e-469d-9089-b720d8db4340",
+      "name": "Rewrite Recap",
+      "credentials": {
+        "googleApi": {
+          "id": "cBgeJAmG4X37rfR8",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# TODO\n## notif par mail à contact@sts-distri quand une archive est effectuée",
+        "height": 368,
+        "width": 672
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        16,
+        -464
+      ],
+      "typeVersion": 1,
+      "id": "fce5dcd8-e501-4949-adab-3bfe282bd4fc",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get Periods To Archive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Periods To Archive": {
+      "main": [
+        [
+          {
+            "node": "Loop Periods",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Periods": {
+      "main": [
+        [
+          {
+            "node": "Get Remaining Lines",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Archive Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Archive Tab": {
+      "main": [
+        [
+          {
+            "node": "Create Archive Tab1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Archive Tab1": {
+      "main": [
+        [
+          {
+            "node": "Get Lines For Period",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lines For Period": {
+      "main": [
+        [
+          {
+            "node": "Format Archive Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Archive Rows": {
+      "main": [
+        [
+          {
+            "node": "Append To Archive Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append To Archive Tab": {
+      "main": [
+        [
+          {
+            "node": "Mark Archived",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Archived": {
+      "main": [
+        [
+          {
+            "node": "Loop Periods",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Remaining Lines": {
+      "main": [
+        [
+          {
+            "node": "Clear sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear sheet": {
+      "main": [
+        [
+          {
+            "node": "Format Recap Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Recap Rows": {
+      "main": [
+        [
+          {
+            "node": "Rewrite Recap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Periods To Archive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2757249d-6e50-416d-8dce-3b94c7f90ea3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "10abab15e1cddf9784b936b459605c273cea23a2036f073d0ae4b8f7b6e309cf"
+  },
+  "id": "SApRE73yyQSpBXaP",
+  "tags": []
+}

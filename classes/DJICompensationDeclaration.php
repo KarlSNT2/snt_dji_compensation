@@ -33,6 +33,7 @@ class DJICompensationDeclaration extends ObjectModel
     const STATUS_DRAFT = 'draft';
     const STATUS_SUBMITTED = 'submitted';
     const STATUS_PROCESSING = 'processing';
+    const STATUS_REGISTERED = 'registered';
     const STATUS_VALIDATED = 'validated';
     const STATUS_REJECTED = 'rejected';
 
@@ -215,6 +216,7 @@ class DJICompensationDeclaration extends ObjectModel
             self::STATUS_DRAFT => 'Brouillon',
             self::STATUS_SUBMITTED => 'Soumise',
             self::STATUS_PROCESSING => 'En traitement',
+            self::STATUS_REGISTERED => 'Enregistree',
             self::STATUS_VALIDATED => 'Validee',
             self::STATUS_REJECTED => 'Rejetee',
         ];
@@ -231,6 +233,7 @@ class DJICompensationDeclaration extends ObjectModel
             self::STATUS_DRAFT => 'secondary',
             self::STATUS_SUBMITTED => 'info',
             self::STATUS_PROCESSING => 'warning',
+            self::STATUS_REGISTERED => 'secondary',
             self::STATUS_VALIDATED => 'success',
             self::STATUS_REJECTED => 'danger',
         ];
@@ -247,6 +250,7 @@ class DJICompensationDeclaration extends ObjectModel
             self::STATUS_DRAFT,
             self::STATUS_SUBMITTED,
             self::STATUS_PROCESSING,
+            self::STATUS_REGISTERED,
         ]);
     }
 
@@ -287,6 +291,7 @@ class DJICompensationDeclaration extends ObjectModel
             self::STATUS_DRAFT => 'Brouillon',
             self::STATUS_SUBMITTED => 'Soumise',
             self::STATUS_PROCESSING => 'En traitement',
+            self::STATUS_REGISTERED => 'Enregistree',
             self::STATUS_VALIDATED => 'Validee',
             self::STATUS_REJECTED => 'Rejetee',
         ];

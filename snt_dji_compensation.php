@@ -31,7 +31,9 @@ if (!defined('_PS_VERSION_')) {
 require_once __DIR__ . '/classes/DJICompensationDeclaration.php';
 require_once __DIR__ . '/classes/DJICompensationInvoice.php';
 require_once __DIR__ . '/classes/DJICompensationStockProof.php';
+require_once __DIR__ . '/classes/DJICompensationHistory.php';
 require_once __DIR__ . '/classes/DJICompensationMailService.php';
+require_once __DIR__ . '/classes/DJICompensationTemplateDownload.php';
 
 class Snt_dji_compensation extends Module
 {
@@ -39,7 +41,7 @@ class Snt_dji_compensation extends Module
     {
         $this->name = 'snt_dji_compensation';
         $this->tab = 'administration';
-        $this->version = '1.1.0';
+        $this->version = '1.4.0';
         $this->author = 'SNT2';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -70,6 +72,7 @@ class Snt_dji_compensation extends Module
         Configuration::updateValue('SNT_DJI_COMPENSATION_ADMIN_EMAIL', Configuration::get('PS_SHOP_EMAIL'));
         Configuration::updateValue('SNT_DJI_COMPENSATION_NOTIFY_ERRORS', true);
         Configuration::updateValue('SNT_DJI_COMPENSATION_API_KEY', $this->generateApiKey());
+        Configuration::updateValue('SNT_DJI_COMPENSATION_N8N_PROMO_WEBHOOK', '');
 
         return parent::install()
             && $this->registerHook('header')
@@ -95,6 +98,7 @@ class Snt_dji_compensation extends Module
         Configuration::deleteByName('SNT_DJI_COMPENSATION_ADMIN_EMAIL');
         Configuration::deleteByName('SNT_DJI_COMPENSATION_NOTIFY_ERRORS');
         Configuration::deleteByName('SNT_DJI_COMPENSATION_API_KEY');
+        Configuration::deleteByName('SNT_DJI_COMPENSATION_N8N_PROMO_WEBHOOK');
 
         return parent::uninstall() && $this->uninstallTab();
     }
@@ -159,8 +163,12 @@ class Snt_dji_compensation extends Module
 
         // Configuration API
         if (Tools::isSubmit('submitApiConfig')) {
-            $this->processApiConfig();
-            $output .= $this->displayConfirmation($this->l('Configuration API mise a jour'));
+            $output .= $this->processApiConfig();
+        }
+
+        // Declencher la synchro des promotions sans changer de template
+        if (Tools::isSubmit('syncPromotionsNow')) {
+            $output .= $this->processSyncPromotionsNow();
         }
 
         // Regenerer cle API
@@ -401,6 +409,7 @@ class Snt_dji_compensation extends Module
         $helper->tpl_vars = [
             'fields_value' => [
                 'SNT_DJI_COMPENSATION_API_KEY' => $apiKey,
+                'SNT_DJI_COMPENSATION_N8N_PROMO_WEBHOOK' => Configuration::get('SNT_DJI_COMPENSATION_N8N_PROMO_WEBHOOK'),
             ],
             'languages' => $this->context->controller->getLanguages(),
             'id_language' => $this->context->language->id,
@@ -434,11 +443,25 @@ class Snt_dji_compensation extends Module
                         'desc' => $this->l('Cle secrete pour acceder a l\'API. Gardez-la confidentielle.'),
                         'readonly' => true,
                     ],
+                    [
+                        'col' => 8,
+                        'type' => 'text',
+                        'name' => 'SNT_DJI_COMPENSATION_N8N_PROMO_WEBHOOK',
+                        'label' => $this->l('Webhook n8n - synchro promotions'),
+                        'desc' => $this->l('URL de production du webhook du flux "Insert Actual Promotions", appelee a chaque upload ou restauration du template avec la cle API ci-dessus dans le header X-Api-Key. Laisser vide pour ne compter que sur le cron n8n.'),
+                    ],
                 ],
                 'submit' => [
                     'title' => $this->l('Enregistrer'),
                 ],
                 'buttons' => [
+                    [
+                        'type' => 'submit',
+                        'title' => $this->l('Synchroniser les promotions maintenant'),
+                        'icon' => 'process-icon-refresh',
+                        'name' => 'syncPromotionsNow',
+                        'class' => 'btn btn-default pull-right',
+                    ],
                     [
                         'type' => 'submit',
                         'title' => $this->l('Regenerer la cle'),
@@ -453,8 +476,119 @@ class Snt_dji_compensation extends Module
 
     protected function processApiConfig()
     {
-        // La cle API est en lecture seule, donc rien a faire ici
-        // Mais on garde la methode pour d'eventuelles futures options
+        // La cle API est en lecture seule : seul le webhook est modifiable.
+        $webhook = trim((string) Tools::getValue('SNT_DJI_COMPENSATION_N8N_PROMO_WEBHOOK'));
+        if ($webhook !== '' && !preg_match('#^https?://#i', $webhook)) {
+            return $this->displayError($this->l('L\'URL du webhook doit commencer par http:// ou https://.'));
+        }
+
+        Configuration::updateValue('SNT_DJI_COMPENSATION_N8N_PROMO_WEBHOOK', $webhook);
+
+        return $this->displayConfirmation($this->l('Configuration API mise a jour'));
+    }
+
+    /**
+     * Appelle le webhook de synchro avec le template actif, sans le modifier.
+     * Sert a tester la chaine module -> n8n, et a forcer une resynchro.
+     */
+    protected function processSyncPromotionsNow()
+    {
+        if (trim((string) Configuration::get('SNT_DJI_COMPENSATION_N8N_PROMO_WEBHOOK')) === '') {
+            return $this->displayError($this->l('Aucune URL de webhook n8n configuree.'));
+        }
+
+        $active = $this->getActiveTemplate();
+        if (!$active) {
+            return $this->displayError($this->l('Aucun template actif.'));
+        }
+
+        $warning = $this->notifyPromotionsSync($active['id_template'], $active['filename']);
+        if ($warning !== '') {
+            return $warning;
+        }
+
+        return $this->displayConfirmation(sprintf(
+            $this->l('Synchronisation declenchee pour le template actif (%s). Resultat visible dans les executions n8n.'),
+            $active['filename']
+        ));
+    }
+
+    /**
+     * Previent n8n que le template actif a change, pour qu'il resynchronise
+     * promotions_dji sans attendre son cron.
+     *
+     * Best effort : le template est deja enregistre quand on arrive ici, un
+     * echec ne doit donc rien annuler. On se contente d'un avertissement, le
+     * cron quotidien du flux rattrapera.
+     *
+     * @param int|null $idTemplate
+     * @param string   $filename
+     * @return string Avertissement a afficher ; vide si l'appel a reussi ou si aucun webhook n'est configure
+     */
+    protected function notifyPromotionsSync($idTemplate, $filename)
+    {
+        $url = trim((string) Configuration::get('SNT_DJI_COMPENSATION_N8N_PROMO_WEBHOOK'));
+        if ($url === '') {
+            return '';
+        }
+
+        $payload = json_encode([
+            'event' => 'template_activated',
+            'id_template' => $idTemplate ? (int) $idTemplate : null,
+            'filename' => $filename,
+            'date' => date('c'),
+        ]);
+        $headers = [
+            'Content-Type: application/json',
+            'X-Api-Key: ' . Configuration::get('SNT_DJI_COMPENSATION_API_KEY'),
+        ];
+
+        $status = 0;
+        $error = '';
+
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => $payload,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_RETURNTRANSFER => true,
+                // Le webhook n8n repond des reception : ces delais ne couvrent
+                // que l'aller-retour, pas l'import lui-meme.
+                CURLOPT_CONNECTTIMEOUT => 3,
+                CURLOPT_TIMEOUT => 5,
+            ]);
+            curl_exec($ch);
+            $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+        } else {
+            $context = stream_context_create(['http' => [
+                'method' => 'POST',
+                'header' => implode("\r\n", $headers),
+                'content' => $payload,
+                'timeout' => 5,
+                'ignore_errors' => true,
+            ]]);
+            $result = @file_get_contents($url, false, $context);
+            if ($result === false) {
+                $error = 'connexion impossible';
+            } elseif (isset($http_response_header[0]) && preg_match('#\s(\d{3})(\s|$)#', $http_response_header[0], $m)) {
+                $status = (int) $m[1];
+            }
+        }
+
+        if ($status >= 200 && $status < 300) {
+            return '';
+        }
+
+        $detail = $error !== '' ? $error : 'HTTP ' . $status;
+        PrestaShopLogger::addLog('[snt_dji_compensation] Webhook synchro promotions en echec : ' . $detail, 2);
+
+        return $this->displayWarning(sprintf(
+            $this->l('Template enregistre, mais la synchronisation n8n des promotions n\'a pas pu etre declenchee (%s). Elle se fera au prochain passage du cron.'),
+            $detail
+        ));
     }
 
     protected function processTemplateUpload()
@@ -489,8 +623,10 @@ class Snt_dji_compensation extends Module
                 'id_employee' => $idEmployee,
                 'date_add' => date('Y-m-d H:i:s'),
             ]);
+            $idTemplate = (int) Db::getInstance()->Insert_ID();
 
-            return $this->displayConfirmation($this->l('Template XLSX mis a jour avec succes.'));
+            return $this->displayConfirmation($this->l('Template XLSX mis a jour avec succes.'))
+                . $this->notifyPromotionsSync($idTemplate, $filename);
         }
 
         return $this->displayError($this->l('Erreur lors de l\'enregistrement du fichier.'));
@@ -636,6 +772,38 @@ class Snt_dji_compensation extends Module
     }
 
     /**
+     * Ligne d'historique du template actuellement actif.
+     *
+     * La comparaison se fait sur le nom de fichier plutot que sur is_active :
+     * c'est SNT_DJI_COMPENSATION_TEMPLATE_FILE qui fait foi pour le fichier
+     * reellement servi aux clients.
+     *
+     * @return array|null null si le template actif n'a pas de ligne
+     *                    d'historique (depose avant sa mise en place)
+     */
+    public function getActiveTemplate()
+    {
+        $filename = Configuration::get('SNT_DJI_COMPENSATION_TEMPLATE_FILE');
+        if (empty($filename)) {
+            return null;
+        }
+
+        $row = Db::getInstance()->getRow(
+            'SELECT * FROM `' . _DB_PREFIX_ . 'dji_compensation_template_history`
+             WHERE filename = "' . pSQL($filename) . '"
+             ORDER BY date_add DESC'
+        );
+
+        if (!$row) {
+            // Pas d'historique : on renvoie tout de meme le nom de fichier pour
+            // que la comparaison reste possible, sans date de mise en ligne.
+            return ['id_template' => null, 'filename' => $filename, 'date_add' => null];
+        }
+
+        return $row;
+    }
+
+    /**
      * Recupere l'historique des templates
      */
     public function getTemplateHistory()
@@ -699,7 +867,8 @@ class Snt_dji_compensation extends Module
         return $this->displayConfirmation(sprintf(
             $this->l('Template "%s" restaure avec succes.'),
             $template['original_filename']
-        ));
+        ))
+            . $this->notifyPromotionsSync($idTemplate, $template['filename']);
     }
 
     /**

@@ -226,6 +226,144 @@ class DJICompensationXlsxReader
     }
 
     /**
+     * Cherche une feuille dont le nom contient l'un des fragments donnes.
+     *
+     * Le nom de la feuille SN a change au fil des versions du template
+     * ("Matrice Baisses de prix", "Numeros SN ", "Matrice declaration SN") et
+     * un client peut deposer un fichier telecharge il y a plusieurs mois.
+     *
+     * @param array $needles Fragments recherches, compares sans casse ni accents
+     * @return array|null La feuille trouvee (index, name), null sinon
+     */
+    public function findSheetByAliases(array $needles)
+    {
+        foreach ($needles as $needle) {
+            $normNeedle = $this->normalizeLabel($needle);
+            if ($normNeedle === '') {
+                continue;
+            }
+            foreach ($this->sheets as $sheet) {
+                if (strpos($this->normalizeLabel($sheet['name']), $normNeedle) !== false) {
+                    return $sheet;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Cherche la ligne d'en-tetes d'une feuille : celle qui contient le plus
+     * de libelles attendus.
+     *
+     * La feuille SN fait preceder ses en-tetes d'un bloc de consignes, ils ne
+     * sont donc pas en ligne 1. Plutot que de figer un numero de ligne qui
+     * bougera a la prochaine version du template, on la reconnait a son contenu.
+     *
+     * @param int   $sheetIndex
+     * @param array $needles    Fragments de libelles attendus
+     * @param int   $minMatches Nombre minimum de fragments pour valider la ligne
+     * @param int   $maxScan    Nombre de lignes explorees depuis le haut
+     * @return int|null Index 1-based de la ligne, null si aucune ne convient
+     */
+    public function findHeaderRow($sheetIndex, array $needles, $minMatches = 3, $maxScan = 15)
+    {
+        $sheetFile = 'xl/worksheets/sheet' . (int) $sheetIndex . '.xml';
+        $content = $this->zip->getFromName($sheetFile);
+        if (!$content) {
+            return null;
+        }
+
+        $xml = simplexml_load_string($content);
+        if (!$xml) {
+            return null;
+        }
+
+        $normNeedles = [];
+        foreach ($needles as $needle) {
+            $norm = $this->normalizeLabel($needle);
+            if ($norm !== '') {
+                $normNeedles[] = $norm;
+            }
+        }
+
+        if (empty($normNeedles)) {
+            return null;
+        }
+
+        $bestRow = null;
+        $bestScore = 0;
+
+        foreach ($xml->sheetData->row as $row) {
+            $rowIndex = (int) $row['r'];
+            if ($rowIndex > $maxScan) {
+                break;
+            }
+
+            // Un en-tete est un assemblage de libelles courts : on concatene la
+            // ligne et on compte les fragments presents.
+            $haystack = '';
+            foreach ($row->c as $cell) {
+                $haystack .= ' ' . $this->normalizeLabel($this->getCellValue($cell));
+            }
+
+            $score = 0;
+            foreach ($normNeedles as $norm) {
+                if (strpos($haystack, $norm) !== false) {
+                    $score++;
+                }
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestRow = $rowIndex;
+            }
+        }
+
+        return $bestScore >= $minMatches ? $bestRow : null;
+    }
+
+    /**
+     * Normalise un libelle pour comparaison : accents retires, espaces et
+     * retours ligne reduits, minuscules.
+     */
+    private function normalizeLabel($label)
+    {
+        if (is_bool($label) || $label === null) {
+            return '';
+        }
+
+        // \s couvre espaces, tabulations et retours ligne : les en-tetes du
+        // template en contiennent (libelles sur plusieurs lignes).
+        $label = preg_replace('/\s+/u', ' ', $label);
+        $label = trim($label);
+
+        if ($label === '') {
+            return '';
+        }
+
+        $label = function_exists('mb_strtolower') ? mb_strtolower($label, 'UTF-8') : strtolower($label);
+
+        // Translitteration manuelle : iconv depend de la locale et Transliterator
+        // n'est pas garanti sur tous les hebergements.
+        $accents = [
+            'a' => ['à', 'á', 'â', 'ã', 'ä', 'å'],
+            'c' => ['ç'],
+            'e' => ['è', 'é', 'ê', 'ë'],
+            'i' => ['ì', 'í', 'î', 'ï'],
+            'n' => ['ñ'],
+            'o' => ['ò', 'ó', 'ô', 'õ', 'ö'],
+            'u' => ['ù', 'ú', 'û', 'ü'],
+            'y' => ['ý', 'ÿ'],
+        ];
+        foreach ($accents as $plain => $variants) {
+            $label = str_replace($variants, $plain, $label);
+        }
+
+        return $label;
+    }
+
+    /**
      * Lit une feuille par son nom
      *
      * @param string $sheetName Nom de la feuille

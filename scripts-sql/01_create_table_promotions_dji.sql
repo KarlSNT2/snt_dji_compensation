@@ -5,12 +5,13 @@
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS public.promotions_dji (
+    id                        SERIAL        PRIMARY KEY,
     statut                    VARCHAR(50),
-    type_promotion            VARCHAR(100),
+    type_promotion            TEXT,
     produit                   TEXT          NOT NULL,
     ean                       VARCHAR(30),
-    reference_article         VARCHAR(50),
-    date_debut                DATE,
+    reference_article         VARCHAR(50)   NOT NULL,
+    date_debut                DATE          NOT NULL,
     date_fin                  DATE,
     prix_vente_ttc            NUMERIC(10,2),
     nouveau_prix_ttc          NUMERIC(10,2),
@@ -19,7 +20,8 @@ CREATE TABLE IF NOT EXISTS public.promotions_dji (
     date_butoir_declaration   DATE,
     mise_a_jour               DATE,
     declaration_sts_dji       VARCHAR(100),
-    created_at                TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    created_at                TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at                TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
 -- ============================================================
@@ -41,6 +43,12 @@ CREATE INDEX IF NOT EXISTS idx_promotions_dji_type
 CREATE INDEX IF NOT EXISTS idx_promotions_dji_dates
     ON public.promotions_dji (date_debut, date_fin);
 
+-- Contrainte d'unicité (référence, date_début, date_fin)
+-- COALESCE transforme NULL en sentinelle pour que l'unicité fonctionne
+-- aussi sur les baisses de prix définitives (sans date de fin).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_promo_ref_dates
+    ON public.promotions_dji (reference_article, date_debut, COALESCE(date_fin, '9999-12-31'));
+
 -- ============================================================
 -- Trigger pour mettre à jour updated_at automatiquement
 -- ============================================================
@@ -52,6 +60,11 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trg_promotions_dji_updated_at
+    BEFORE UPDATE ON public.promotions_dji
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
 
 -- ============================================================
 -- Commentaires de colonnes

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<module>
+    <name>snt_dji_compensation</name>
+    <displayName><![CDATA[SNT Compensation DJI]]></displayName>
+    <version><![CDATA[1.4.0]]></version>
+    <description><![CDATA[Module de declaration de compensation DJI pour les clients B2B]]></description>
+    <author><![CDATA[SNT2]]></author>
+    <tab><![CDATA[administration]]></tab>
+	<confirmUninstall><![CDATA[Supprimer ce module supprimera toutes les donnees associees.]]></confirmUninstall>
+    <is_configurable>1</is_configurable>
+    <need_instance>0</need_instance>
+</module>

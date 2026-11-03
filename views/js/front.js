@@ -11,16 +11,6 @@ document.addEventListener('DOMContentLoaded', function() {
     var maxFileSizeBytes = window.maxFileSizeBytes || (10 * 1024 * 1024);
     var productTypes = window.productTypes || { mic: 'DJI Mic', power: 'DJI Power' };
 
-    // Toggle stock proofs section
-    var hasMicPowerCheckbox = document.getElementById('has_mic_power_products');
-    var stockProofsSection = document.getElementById('stock-proofs-section');
-
-    if (hasMicPowerCheckbox && stockProofsSection) {
-        hasMicPowerCheckbox.addEventListener('change', function() {
-            stockProofsSection.style.display = this.checked ? 'block' : 'none';
-        });
-    }
-
     // ===== DROPZONE FUNCTIONALITY =====
 
     function initDropzone(dropzoneId, inputId, previewId, options) {
@@ -240,7 +230,79 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // File validation
+    // ===== AVERTISSEMENT TEMPLATE OBSOLETE =====
+    // La modale n'est rendue par le serveur que si la derniere version du
+    // template telechargee par le client differe de celle actuellement en
+    // ligne. Elle remplace alors la confirmation native au moment de soumettre.
+    // Le client garde toujours la possibilite d'envoyer son fichier : il assume,
+    // et une declaration hors delai est de toute facon detectee en aval.
+
+    var outdatedModal = document.getElementById('dji-template-outdated-modal');
+    var submitButton = document.getElementById('dji-submit-declaration');
+    var templateRefreshed = false;
+    var bypassOutdatedWarning = false;
+    var focusBeforeModal = null;
+
+    function closeOutdatedModal() {
+        if (!outdatedModal || outdatedModal.hidden) return;
+        outdatedModal.hidden = true;
+        document.body.classList.remove('dji-modal-open');
+        if (focusBeforeModal && focusBeforeModal.focus) focusBeforeModal.focus();
+    }
+
+    function openOutdatedModal() {
+        if (!outdatedModal) return;
+        focusBeforeModal = document.activeElement;
+        outdatedModal.hidden = false;
+        document.body.classList.add('dji-modal-open');
+        var confirmBtn = document.getElementById('dji-template-outdated-confirm');
+        if (confirmBtn) confirmBtn.focus();
+    }
+
+    // Le drapeau est calcule au rendu de la page. Si le client telecharge la
+    // version a jour sans recharger, l'avertissement n'a plus lieu d'etre.
+    Array.prototype.forEach.call(
+        document.querySelectorAll('[data-dji-template-download]'),
+        function(link) {
+            link.addEventListener('click', function() {
+                templateRefreshed = true;
+                closeOutdatedModal();
+            });
+        }
+    );
+
+    if (outdatedModal) {
+        Array.prototype.forEach.call(
+            outdatedModal.querySelectorAll('[data-dji-modal-dismiss]'),
+            function(el) {
+                el.addEventListener('click', function() {
+                    closeOutdatedModal();
+                    // Soumission interrompue : on repasse le formulaire en mode
+                    // neutre pour qu'un envoi accidentel ne parte pas.
+                    var actionInput = document.querySelector('input[name="action"]');
+                    if (actionInput) actionInput.value = 'save';
+                });
+            }
+        );
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' || e.key === 'Esc') closeOutdatedModal();
+        });
+
+        var outdatedConfirmBtn = document.getElementById('dji-template-outdated-confirm');
+        if (outdatedConfirmBtn && submitButton) {
+            outdatedConfirmBtn.addEventListener('click', function() {
+                bypassOutdatedWarning = true;
+                closeOutdatedModal();
+                // On repasse par le vrai bouton : un form.submit() n'enverrait
+                // pas submitDeclaration, que le controleur attend en POST.
+                submitButton.click();
+            });
+        }
+    }
+
+    // ===== VALIDATION DES FICHIERS =====
+
     var form = document.getElementById('declaration-form');
 
     if (form) {
@@ -248,7 +310,6 @@ document.addEventListener('DOMContentLoaded', function() {
             var xlsxInput = document.getElementById('xlsx_file');
             var invoicesInput = document.getElementById('invoices');
             var stockProofsInputForm = document.getElementById('stock_proofs');
-            var hasMicPower = hasMicPowerCheckbox && hasMicPowerCheckbox.checked;
             var errors = [];
 
             // Validate XLSX
@@ -281,8 +342,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            // Validate images (if Mic/Power products)
-            if (hasMicPower && stockProofsInputForm && stockProofsInputForm.files.length > 0) {
+            // Validate images (optional stock proofs)
+            if (stockProofsInputForm && stockProofsInputForm.files.length > 0) {
                 var allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
                 for (var j = 0; j < stockProofsInputForm.files.length; j++) {
@@ -309,7 +370,17 @@ document.addEventListener('DOMContentLoaded', function() {
             // Confirm submission
             var actionInput = document.querySelector('input[name="action"]');
             if (actionInput && actionInput.value === 'submit') {
-                if (!confirm('Etes-vous sur de vouloir soumettre cette declaration ? Vous ne pourrez plus la modifier apres soumission.')) {
+                // Template obsolete : la modale fait office de confirmation.
+                if (outdatedModal && !templateRefreshed && !bypassOutdatedWarning) {
+                    e.preventDefault();
+                    openOutdatedModal();
+                    return false;
+                }
+
+                // Sinon, confirmation standard. On ne la pose pas deux fois
+                // quand le client vient de valider la modale.
+                if (!bypassOutdatedWarning
+                    && !confirm('Etes-vous sur de vouloir soumettre cette declaration ? Vous ne pourrez plus la modifier apres soumission.')) {
                     e.preventDefault();
                     actionInput.value = 'save';
                     return false;

@@ -2,19 +2,196 @@
   "name": "Declarations summary",
   "nodes": [
     {
+      "parameters": {
+        "jsCode": "// Enrichit chaque ligne de declaration avec la BONNE promotion (reference + periode)\nconst items = $input.all();\nconst promos = $('GET Promotions Types').all().map(i => i.json);\n\n// Normalise une date en 'yyyy-mm-dd'. Accepte ISO et US/FR 'x/y/yyyy'.\nfunction isoDate(s) {\n  s = String(s || '').trim();\n  let m = s.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);\n  if (m) return `${m[1]}-${m[2]}-${m[3]}`;\n  m = s.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})/);\n  if (m) {\n    let a = +m[1], b = +m[2], y = +m[3], mo, da;\n    if (a > 12) { da = a; mo = b; }\n    else if (b > 12) { mo = a; da = b; }\n    else { mo = a; da = b; }\n    return `${y}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`;\n  }\n  return '';\n}\n\n// 'yyyy-mm-dd HH:mm:ss' -> 'JJ/MM/AAAA HH:mm'\nfunction fmtDateTime(dt) {\n  if (!dt) return '';\n  const m = String(dt).match(/^(\\d{4})-(\\d{2})-(\\d{2})[ T](\\d{2}):(\\d{2})/);\n  if (m) return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`;\n  const d = String(dt).match(/^(\\d{4})-(\\d{2})-(\\d{2})/);\n  return d ? `${d[3]}/${d[2]}/${d[1]}` : String(dt);\n}\n\nfunction dayUTC(iso) {\n  const m = String(iso || '').match(/^(\\d{4})-(\\d{2})-(\\d{2})/);\n  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null;\n}\n\n// Index des promos par reference_article\nconst byRef = {};\nfor (const p of promos) {\n  const r = String(p.reference_article || '').trim();\n  if (!r) continue;\n  (byRef[r] = byRef[r] || []).push({\n    date_debut: isoDate(p.date_debut),\n    date_fin: isoDate(p.date_fin),\n    type_promotion: p.type_promotion || '',\n  });\n}\n\nconst results = [];\n\nfor (const item of items) {\n  const d = item.json;\n  const ref = String(d.reference_article || '').trim();\n  const dDeb = isoDate(d.date_debut);\n  const cands = byRef[ref] || [];\n\n  // Selection de la bonne periode de promo\n  let promo = null;\n  if (dDeb) promo = cands.find(c => c.date_debut === dDeb);\n  if (!promo && dDeb) promo = cands.find(c => c.date_debut && c.date_fin && c.date_debut <= dDeb && dDeb <= c.date_fin);\n  if (!promo && cands.length === 1) promo = cands[0];\n\n  // Dates officielles de la promo, repli sur celles du XLSX du revendeur\n  const dateDebut = (promo && promo.date_debut) || dDeb || '';\n  const dateFin   = (promo && promo.date_fin)   || isoDate(d.date_fin) || '';\n  const typePromo = (promo && promo.type_promotion) || d.type_promotion || '';\n\n  // STATUT : RETARD si date de declaration > date de fin de promo + 7 jours\n  let statut = '';\n  const fin = dayUTC(dateFin);\n  const decl = dayUTC(isoDate(d.declaration_date));\n  if (fin !== null && decl !== null && decl > fin + 7 * 24 * 3600 * 1000) {\n    statut = 'RETARD';\n  }\n\n  results.push({\n    json: {\n      'NOM DU CLIENT': d.customer_company + \" - \" + d.customer_name || d.customer_name || '',\n      'TYPE DE PROMO': typePromo,\n      'REF ARTICLE': d.reference_article || '',\n      'DESIGNATION': d.produit || '',\n      'DATE DEBUT': dateDebut,\n      'DATE FIN': dateFin,\n      'QUANTITE': d.quantite_declaree || 0,\n      'COMPENSATION HT': d.compensation_ht || 0,\n      'TOTAL': d.total_compensation_ht || (d.quantite_declaree * d.compensation_ht) || 0,\n      'REF AVOIR': d.reference_avoir || '',\n      'STATUT': statut,\n      'DATE DECLARATION': fmtDateTime(d.declaration_date),\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1440,
+        768
+      ],
+      "id": "fb45ca64-dd1d-4aa1-9149-b9a7e1b648f1",
+      "name": "Map to Google Sheets Columns"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT reference_article,\n       type_promotion,\n       to_char(date_debut, 'YYYY-MM-DD') AS date_debut,\n       to_char(date_fin,   'YYYY-MM-DD') AS date_fin\nFROM promotions_dji;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -2320,
+        1008
+      ],
+      "id": "eac1b673-d62c-4cfe-9433-4f0803cfdd7e",
+      "name": "GET Promotions Types",
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "S4K1CxlHRmNEsUuM",
+          "name": "APP Metier Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "lines",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -1664,
+        1008
+      ],
+      "id": "8fb26324-18eb-499f-b115-4dfa3c8a3e97",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Pass').first().json.site_url }}index.php?fc=module&module=snt_dji_compensation&controller=api&action=declarations-summary&status=submitted&limit=20",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1888,
+        1008
+      ],
+      "id": "48183b7c-5566-4b4c-869d-f2d8ec17b48b",
+      "name": "GET Declarations Summary",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "Qaxzkse7L04xyZ8I",
+          "name": "Module API Token"
+        }
+      }
+    },
+    {
       "parameters": {},
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        0,
-        0
+        -3568,
+        1008
       ],
-      "id": "46d061e9-bde2-4fdd-994b-23bf9e4d300b",
+      "id": "5ee05fd8-e14f-4cc5-8892-c12b74287c99",
       "name": "When clicking 'Execute workflow'"
     },
     {
       "parameters": {
-        "url": "=https://dev-prestashop-2224c0698cb3.prestashop.sh/index.php?fc=module&module=snt_dji_compensation&controller=api&action=declarations-summary",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "173c486b-eff5-4c03-93fd-caeaa9c1bde4",
+              "name": "site_url",
+              "value": "https://store.sts-distribution.com/",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2848,
+        880
+      ],
+      "id": "7fe8e63e-2dbe-4708-ab1f-9f56bee713a9",
+      "name": "PROD"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "173c486b-eff5-4c03-93fd-caeaa9c1bde4",
+              "name": "site_url",
+              "value": "https://dev-prestashop-2224c0698cb3.prestashop.sh/",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2848,
+        1136
+      ],
+      "id": "294bab97-3f51-4617-85d0-5f941af66f8e",
+      "name": "DEV"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "4daa64e6-3090-44da-9aba-a107582443f8",
+              "leftValue": "={{ $json.env }}",
+              "rightValue": "prod",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3136,
+        1008
+      ],
+      "id": "41f12d5f-1625-4738-9703-3f671df6031c",
+      "name": "IF PROD"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -2560,
+        1008
+      ],
+      "id": "3eaf7472-3c73-4557-bbcb-56ef424ff5bb",
+      "name": "Pass"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Declarations reellement examinees par l'API, y compris celles sans ligne\n// sur la feuille 1. Les faire toutes avancer est indispensable : une\n// declaration sans quantite resterait sinon en 'submitted', n'atteindrait\n// jamais le flux SN et occuperait une place du lot a chaque run.\n// Les declarations en erreur ne figurent pas dans cette liste : elles seront\n// retentees au prochain passage.\nconst resp = $('GET Declarations Summary').first().json;\nconst ids = resp.processed_declarations || [];\nreturn ids.map(id => ({ json: { id_declaration: id } }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1664,
+        1232
+      ],
+      "id": "7797feb0-8708-4250-9d92-616b1e5cf306",
+      "name": "Collect Declaration IDs",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Pass').first().json.site_url }}index.php?fc=module&module=snt_dji_compensation&controller=api&action=update-status&id_declaration={{ $json.id_declaration }}&status=processing",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "httpBearerAuth",
         "options": {}
@@ -22,98 +199,312 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        208,
-        0
+        -1440,
+        1232
       ],
-      "id": "150a0a00-2eaf-4da8-9590-acb0b3e78722",
-      "name": "GET Declarations Summary",
+      "id": "96189b93-9fac-42cd-89e9-47e08b64c6eb",
+      "name": "Mark as Processing",
       "credentials": {
         "httpBearerAuth": {
-          "id": "RcQ2z2vXydxGQuhz",
-          "name": "API Key Presta Module"
+          "id": "Qaxzkse7L04xyZ8I",
+          "name": "Module API Token"
         }
       }
     },
     {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT reference_article, type_promotion FROM promotions_dji;",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
       "position": [
-        208,
-        200
+        -2112,
+        1008
       ],
-      "id": "c1a6b3cf-e223-41d5-abbe-a259cad46582",
-      "name": "GET Promotions Types",
-      "credentials": {
-        "postgres": {
-          "id": "dISm0QOG03jvqYLL",
-          "name": "DB externe"
-        }
-      }
+      "id": "1a39532c-fea6-4c16-ab42-ace6e3c289da",
+      "name": "Limit"
     },
     {
       "parameters": {
-        "jsCode": "// Récupérer les données des deux sources\nconst declarationsData = $('GET Declarations Summary').first().json;\nconst promotionsData = $('GET Promotions Types').all();\n\n// Créer un index des promotions par reference_article\nconst promoByRef = {};\nfor (const promo of promotionsData) {\n  const ref = promo.json.reference_article;\n  if (ref) {\n    promoByRef[ref.toUpperCase().trim()] = promo.json.type_promotion || '';\n  }\n}\n\n// Transformer les lignes de déclarations\nconst results = [];\nconst lines = declarationsData.lines || [];\n\nfor (const d of lines) {\n  const refKey = (d.reference_article || '').toUpperCase().trim();\n  const typePromo = promoByRef[refKey] || '';\n  \n  results.push({\n    json: {\n      'NOM DU CLIENT': d.customer_company || d.customer_name || '',\n      'TYPE DE PROMO': typePromo,\n      'DATE DEBUT': d.date_debut || '',\n      'DATE FIN': d.date_fin || '',\n      'QUANTITE': d.quantite_declaree || 0,\n      'COMPENSATION HT': d.compensation_ht || 0,\n      'TOTAL': d.total_compensation_ht || (d.quantite_declaree * d.compensation_ht) || 0,\n      'REF AVOIR': d.reference_avoir || ''\n    }\n  });\n}\n\nreturn results;"
+        "jsCode": "const items = $input.all();\nconst promos = $('GET Promotions Types').all().map(i => i.json);\n\n// Normalise une date en 'yyyy-mm-dd'. Accepte ISO et US/FR 'x/y/yyyy'.\nfunction isoDate(s) {\n  s = String(s || '').trim();\n  let m = s.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);\n  if (m) return `${m[1]}-${m[2]}-${m[3]}`;\n  m = s.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})/);\n  if (m) {\n    let a = +m[1], b = +m[2], y = +m[3], mo, da;\n    if (a > 12) { da = a; mo = b; }\n    else if (b > 12) { mo = a; da = b; }\n    else { mo = a; da = b; }\n    return `${y}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`;\n  }\n  return '';\n}\n\n// Vers 'yyyy-mm-dd HH:mm:ss' (accepte le separateur espace ou 'T').\nfunction isoDateTime(dt) {\n  const m = String(dt || '').match(/^(\\d{4})-(\\d{2})-(\\d{2})[ T](\\d{2}):(\\d{2})(?::(\\d{2}))?/);\n  if (m) return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6] || '00'}`;\n  const d = isoDate(dt);\n  return d ? `${d} 00:00:00` : '';\n}\n\n// Index des promos par reference_article\nconst byRef = {};\nfor (const p of promos) {\n  const r = String(p.reference_article || '').trim();\n  if (!r) continue;\n  (byRef[r] = byRef[r] || []).push({\n    date_debut: isoDate(p.date_debut),\n    date_fin: isoDate(p.date_fin),\n    type_promotion: p.type_promotion || '',\n  });\n}\n\n// Numero de ligne au sein de chaque declaration : cle d'idempotence cote base.\n// Le XLSX etant fige des la soumission, cet ordre est stable d'un run a l'autre.\nconst lineCounters = {};\nconst results = [];\n\nfor (const item of items) {\n  const d = item.json;\n  const ref = String(d.reference_article || '').trim();\n  const dDeb = isoDate(d.date_debut);\n  const cands = byRef[ref] || [];\n\n  // Selection de la bonne periode de promo\n  let promo = null;\n  if (dDeb) promo = cands.find(c => c.date_debut === dDeb);                      // 1. date de debut identique\n  if (!promo && dDeb) promo = cands.find(c => c.date_debut && c.date_fin && c.date_debut <= dDeb && dDeb <= c.date_fin); // 2. periode contenant la date\n  if (!promo && cands.length === 1) promo = cands[0];                            // 3. une seule promo pour la ref\n\n  // Dates officielles de la promo, repli sur celles du XLSX du revendeur\n  const dateDebut = (promo && promo.date_debut) || dDeb || '';\n  const dateFin   = (promo && promo.date_fin)   || isoDate(d.date_fin) || '';\n  const typePromo = (promo && promo.type_promotion) || d.type_promotion || '';\n\n  // 'Societe - Nom'. Les deux parties sont facultatives : on ne veut ni\n  // 'null - Jean Dupont' ni un separateur orphelin.\n  const nomClient = [d.customer_company, d.customer_name]\n    .map(v => String(v == null ? '' : v).trim())\n    .filter(v => v !== '')\n    .join(' - ');\n\n  const idDecl = Number(d.id_declaration) || 0;\n  lineCounters[idDecl] = (lineCounters[idDecl] || 0) + 1;\n\n  const qte = Number(d.quantite_declaree) || 0;\n  const compensation = (d.compensation_ht === null || d.compensation_ht === undefined || d.compensation_ht === '')\n    ? '' : Number(d.compensation_ht);\n  let total = d.total_compensation_ht;\n  if (total === null || total === undefined || total === '') {\n    total = (compensation !== '' && qte > 0) ? Math.round(compensation * qte * 100) / 100 : '';\n  }\n\n  results.push({\n    json: {\n      id_declaration: idDecl,\n      ligne_num: lineCounters[idDecl],\n      id_customer: Number(d.id_customer) || 0,\n      declaration_reference: d.declaration_reference || '',\n      nom_du_client: nomClient,\n      type_de_promo: typePromo,\n      ref_article: ref,\n      designation: d.produit || '',\n      date_debut: dateDebut,\n      date_fin: dateFin,\n      quantite: qte,\n      compensation_ht: compensation,\n      total: total,\n      ref_avoir: d.reference_avoir || '',\n      date_declaration: isoDateTime(d.declaration_date),\n    }\n  });\n}\n\nreturn results;"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        480,
-        100
+        -1440,
+        1008
       ],
-      "id": "7bd92eaa-e527-4481-a12b-36acc5a26aca",
-      "name": "Join and Map to Sheets"
+      "id": "d365ea10-705c-49e3-8924-15122248e578",
+      "name": "Map to Google Sheets Columns1"
     },
     {
       "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH v AS (\n    SELECT\n        NULLIF($1::text,  '')::int       AS id_declaration,\n        NULLIF($2::text,  '')::int       AS ligne_num,\n        NULLIF($3::text,  '')::int       AS id_customer,\n        NULLIF($4::text,  '')            AS declaration_reference,\n        NULLIF($5::text,  '')            AS nom_du_client,\n        NULLIF($6::text,  '')            AS type_de_promo,\n        NULLIF($7::text,  '')            AS ref_article,\n        NULLIF($8::text,  '')            AS designation,\n        NULLIF($9::text,  '')::date      AS date_debut,\n        NULLIF($10::text, '')::date      AS date_fin,\n        NULLIF($11::text, '')::int       AS quantite,\n        NULLIF($12::text, '')::numeric   AS compensation_ht,\n        NULLIF($13::text, '')::numeric   AS total,\n        NULLIF($14::text, '')            AS ref_avoir,\n        NULLIF($15::text, '')::timestamp AS date_declaration\n),\norig AS (\n    SELECT e.id_declaration, e.declaration_reference, e.date_declaration\n    FROM public.declarations_export e\n    JOIN v ON e.id_customer    =  v.id_customer\n          AND e.ref_article    =  v.ref_article\n          AND e.date_fin       IS NOT DISTINCT FROM v.date_fin\n          AND e.id_declaration IS DISTINCT FROM v.id_declaration\n    ORDER BY e.date_declaration NULLS LAST, e.id_declaration\n    LIMIT 1\n)\nINSERT INTO public.declarations_export (\n    id_declaration, ligne_num, id_customer, declaration_reference,\n    nom_du_client, type_de_promo, ref_article, designation,\n    date_debut, date_fin, quantite, compensation_ht, total, ref_avoir,\n    date_declaration, is_retard, is_doublon,\n    doublon_de_declaration, doublon_de_reference, doublon_de_date\n)\nSELECT\n    v.id_declaration, v.ligne_num, v.id_customer, v.declaration_reference,\n    v.nom_du_client, v.type_de_promo, v.ref_article, v.designation,\n    v.date_debut, v.date_fin, v.quantite, v.compensation_ht, v.total, v.ref_avoir,\n    v.date_declaration,\n    COALESCE(v.date_fin IS NOT NULL\n             AND v.date_declaration IS NOT NULL\n             AND v.date_declaration::date > v.date_fin + 7, FALSE),\n    (o.id_declaration IS NOT NULL),\n    o.id_declaration, o.declaration_reference, o.date_declaration\nFROM v LEFT JOIN orig o ON TRUE\nON CONFLICT (id_declaration, ligne_num) DO NOTHING\nRETURNING\n    declaration_reference,\n    nom_du_client,\n    type_de_promo,\n    ref_article,\n    designation,\n    to_char(date_debut,       'YYYY-MM-DD')         AS date_debut_txt,\n    to_char(date_fin,         'YYYY-MM-DD')         AS date_fin_txt,\n    quantite,\n    compensation_ht,\n    total,\n    ref_avoir,\n    is_retard,\n    is_doublon,\n    doublon_de_reference,\n    to_char(doublon_de_date,  'DD/MM/YYYY')         AS doublon_de_date_txt,\n    to_char(date_declaration, 'DD/MM/YYYY HH24:MI') AS date_declaration_txt;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.id_declaration, $json.ligne_num, $json.id_customer, $json.declaration_reference, $json.nom_du_client, $json.type_de_promo, $json.ref_article, $json.designation, $json.date_debut, $json.date_fin, $json.quantite, $json.compensation_ht, $json.total, $json.ref_avoir, $json.date_declaration] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1232,
+        1008
+      ],
+      "id": "84e47316-2a9d-4237-8f1d-322d709a0631",
+      "name": "Insert Export Lines",
+      "credentials": {
+        "postgres": {
+          "id": "S4K1CxlHRmNEsUuM",
+          "name": "APP Metier Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().filter(i => i.json && typeof i.json.is_doublon === 'boolean')\n.map(i => {\n  const r = i.json;\n\n  // Une ligne peut cumuler les deux anomalies.\n  const statut = [\n    r.is_retard  ? 'RETARD'  : null,\n    r.is_doublon ? 'DOUBLON' : null,\n  ].filter(Boolean).join(' + ');\n\n  const doublonDe = r.is_doublon\n    ? [r.doublon_de_reference, r.doublon_de_date_txt].filter(Boolean).join(' du ')\n    : '';\n\n  // Postgres renvoie les NUMERIC sous forme de chaine : on reconvertit pour que\n  // Google Sheets stocke un nombre et non du texte.\n  const num = (v) => (v === null || v === undefined || v === '') ? 0 : Number(v);\n\n  return {\n    json: {\n      'REF DECLARATION': r.declaration_reference || '',\n      'NOM DU CLIENT': r.nom_du_client || '',\n      'TYPE DE PROMO': r.type_de_promo || '',\n      'REF ARTICLE': r.ref_article || '',\n      'DESIGNATION': r.designation || '',\n      'DATE DEBUT': r.date_debut_txt || '',\n      'DATE FIN': r.date_fin_txt || '',\n      'QUANTITE': num(r.quantite),\n      'COMPENSATION HT': num(r.compensation_ht),\n      'TOTAL': num(r.total),\n      'REF AVOIR': r.ref_avoir || '',\n      'STATUT': statut,\n      'DOUBLON DE': doublonDe,\n      'DATE DECLARATION': r.date_declaration_txt || '',\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1024,
+        1008
+      ],
+      "id": "793f369c-e26a-4139-975f-a3f5d4820fb5",
+      "name": "Format for Sheet"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
         "documentId": {
           "__rl": true,
+          "value": "12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls",
           "mode": "list",
-          "value": ""
+          "cachedResultName": "DJI Compensations",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
+          "value": 1919104994,
           "mode": "list",
-          "value": ""
+          "cachedResultName": "Feuille 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/12klyiWjJG8b7qOCrWr-6G0sayx4m70JpX7NKHUQPNls/edit#gid=1919104994"
         },
         "columns": {
           "mappingMode": "autoMapInputData",
-          "value": {}
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "REF DECLARATION",
+              "displayName": "REF DECLARATION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "NOM DU CLIENT",
+              "displayName": "NOM DU CLIENT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "TYPE DE PROMO",
+              "displayName": "TYPE DE PROMO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "REF ARTICLE",
+              "displayName": "REF ARTICLE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DESIGNATION",
+              "displayName": "DESIGNATION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DATE DEBUT",
+              "displayName": "DATE DEBUT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DATE FIN",
+              "displayName": "DATE FIN",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "QUANTITE",
+              "displayName": "QUANTITE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "COMPENSATION HT",
+              "displayName": "COMPENSATION HT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "TOTAL",
+              "displayName": "TOTAL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "REF AVOIR",
+              "displayName": "REF AVOIR",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "STATUT",
+              "displayName": "STATUT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DOUBLON DE",
+              "displayName": "DOUBLON DE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DATE DECLARATION",
+              "displayName": "DATE DECLARATION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.6,
       "position": [
-        700,
-        100
+        -816,
+        1008
       ],
-      "id": "google-sheets-node-01",
-      "name": "Google Sheets - Append",
+      "id": "2e72ac03-2f67-4ae6-952a-c7e88b132e2e",
+      "name": "Google Sheets Append",
+      "executeOnce": false,
+      "retryOnFail": true,
       "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "",
-          "name": ""
+        "googleApi": {
+          "id": "cBgeJAmG4X37rfR8",
+          "name": "Google Service Account account"
         }
       }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -3568,
+        816
+      ],
+      "id": "e1f23ce8-7b13-41f2-b697-ac79f99b8076",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2c1c5c81-00a9-4fbe-b79f-0186477d9d5d",
+              "name": "env",
+              "value": "prod",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3344,
+        1008
+      ],
+      "id": "996e663c-10b3-46ac-bf43-c04f821ddf00",
+      "name": "ENV"
     }
   ],
   "pinData": {},
   "connections": {
-    "When clicking 'Execute workflow'": {
+    "GET Promotions Types": {
       "main": [
         [
           {
-            "node": "GET Declarations Summary",
+            "node": "Limit",
             "type": "main",
             "index": 0
-          },
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
           {
-            "node": "GET Promotions Types",
+            "node": "Map to Google Sheets Columns1",
             "type": "main",
             "index": 0
           }
@@ -124,29 +515,151 @@
       "main": [
         [
           {
-            "node": "Join and Map to Sheets",
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Collect Declaration IDs",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "GET Promotions Types": {
+    "When clicking 'Execute workflow'": {
       "main": [
         [
           {
-            "node": "Join and Map to Sheets",
+            "node": "ENV",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Join and Map to Sheets": {
+    "PROD": {
       "main": [
         [
           {
-            "node": "Google Sheets - Append",
+            "node": "Pass",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DEV": {
+      "main": [
+        [
+          {
+            "node": "Pass",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF PROD": {
+      "main": [
+        [
+          {
+            "node": "PROD",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DEV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass": {
+      "main": [
+        [
+          {
+            "node": "GET Promotions Types",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "GET Declarations Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map to Google Sheets Columns1": {
+      "main": [
+        [
+          {
+            "node": "Insert Export Lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Export Lines": {
+      "main": [
+        [
+          {
+            "node": "Format for Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Sheet": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Declaration IDs": {
+      "main": [
+        [
+          {
+            "node": "Mark as Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "ENV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ENV": {
+      "main": [
+        [
+          {
+            "node": "IF PROD",
             "type": "main",
             "index": 0
           }
@@ -154,16 +667,15 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "4a8f883f-b405-4513-849c-3d3f94009466",
+  "versionId": "51e27a54-e324-4427-86d2-ee603f885192",
   "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "7ba3ab14852dbb702a48496a98bc933d084ef27980f5ff171a5b9db8c19b65fe"
+    "instanceId": "10abab15e1cddf9784b936b459605c273cea23a2036f073d0ae4b8f7b6e309cf"
   },
-  "id": "2r5cz3YXR1XAREef",
+  "id": "NtDN1mrr9Iiw93B7",
   "tags": []
 }

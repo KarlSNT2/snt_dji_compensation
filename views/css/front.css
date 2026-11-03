@@ -270,6 +270,14 @@
     margin-right: 0.5rem;
 }
 
+#has_mic_power_products {
+    height: fit-content !important;
+}
+
+.custom-control .custom-control-label:hover {
+    color: #007bff;
+}
+
 /* Stock proofs section */
 #stock-proofs-section {
     padding-top: 1rem;
@@ -363,5 +371,102 @@
 
     .dji-compensation-declaration .form-actions .ml-2 {
         margin-left: 0 !important;
+    }
+}
+
+/* ===== Modale d'avertissement (template obsolete) =====
+   Autonome : ne depend ni du JS de Bootstrap ni de celui du theme. */
+.dji-modal[hidden] {
+    display: none;
+}
+
+.dji-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1060;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.dji-modal__backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.dji-modal__dialog {
+    position: relative;
+    width: 100%;
+    max-width: 540px;
+    max-height: 100%;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.dji-modal__header {
+    display: flex;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #dee2e6;
+    color: #856404;
+    background-color: #fff3cd;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+
+.dji-modal__header .material-icons {
+    margin-right: 0.5rem;
+}
+
+.dji-modal__body {
+    padding: 1.25rem;
+}
+
+.dji-modal__facts {
+    margin: 0 0 1rem;
+    padding-left: 1.25rem;
+    color: #555;
+}
+
+.dji-modal__footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    padding: 1rem 1.25rem;
+    border-top: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+}
+
+/* Fallback pour les navigateurs sans "gap" sur un conteneur flex */
+.dji-modal__footer > * + * {
+    margin-left: 0.5rem;
+}
+
+body.dji-modal-open {
+    overflow: hidden;
+}
+
+@media (max-width: 575px) {
+    .dji-modal__footer {
+        justify-content: stretch;
+    }
+
+    .dji-modal__footer > * {
+        flex: 1 1 100%;
+    }
+
+    .dji-modal__footer > * + * {
+        margin-left: 0;
     }
 }

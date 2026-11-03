@@ -51,8 +51,12 @@
             <h4>{l s='Declaration' mod='snt_dji_compensation'}</h4>
             <table class="table">
                 <tr>
-                    <td><strong>{l s='Date' mod='snt_dji_compensation'}</strong></td>
-                    <td>{$declaration->date_add|date_format:'%d/%m/%Y %H:%M'}</td>
+                    <td><strong>{l s='Date de creation' mod='snt_dji_compensation'}</strong></td>
+                    <td>{$declaration->date_add|date_format:'%d/%m/%Y %H:%M:%S'}</td>
+                </tr>
+                <tr>
+                    <td><strong>{l s='Derniere action' mod='snt_dji_compensation'}</strong></td>
+                    <td>{$declaration->date_upd|date_format:'%d/%m/%Y %H:%M:%S'}</td>
                 </tr>
                 <tr>
                     <td><strong>{l s='Statut' mod='snt_dji_compensation'}</strong></td>
@@ -164,6 +168,41 @@
     {/if}
 </div>
 {/if}
+
+{* Historique des actions *}
+<div class="panel">
+    <div class="panel-heading">
+        <i class="icon-history"></i>
+        {l s='Historique des actions' mod='snt_dji_compensation'} ({$history|count})
+    </div>
+    {if $history|count > 0}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>{l s='Date' mod='snt_dji_compensation'}</th>
+                    <th>{l s='Auteur' mod='snt_dji_compensation'}</th>
+                    <th>{l s='Action' mod='snt_dji_compensation'}</th>
+                    <th>{l s='Details' mod='snt_dji_compensation'}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {foreach from=$history item=event}
+                    <tr>
+                        <td><small>{$event.date_add|date_format:'%d/%m/%Y %H:%M:%S'}</small></td>
+                        <td>
+                            {if $event.actor_name}{$event.actor_name|escape:'html':'UTF-8'}{else}<span class="text-muted">-</span>{/if}
+                            <br><span class="label label-default">{$event.actor_type_label|escape:'html':'UTF-8'}</span>
+                        </td>
+                        <td>{$event.action_label|escape:'html':'UTF-8'}</td>
+                        <td>{if $event.details}<small>{$event.details|escape:'html':'UTF-8'}</small>{else}<span class="text-muted">-</span>{/if}</td>
+                    </tr>
+                {/foreach}
+            </tbody>
+        </table>
+    {else}
+        <p class="text-muted">{l s='Aucune action enregistree' mod='snt_dji_compensation'}</p>
+    {/if}
+</div>
 
 {* Notes admin *}
 <div class="panel">

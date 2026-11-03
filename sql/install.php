@@ -34,7 +34,7 @@ $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'dji_compensation_declar
     `xlsx_s3_key` varchar(512) DEFAULT NULL,
     `xlsx_original_filename` varchar(255) DEFAULT NULL,
     `has_mic_power_products` tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
-    `status` enum("draft","submitted","processing","validated","rejected") NOT NULL DEFAULT "draft",
+    `status` enum("draft","submitted","processing","registered","validated","rejected") NOT NULL DEFAULT "draft",
     `admin_notes` text,
     `date_add` datetime NOT NULL,
     `date_upd` datetime NOT NULL,
@@ -71,6 +71,21 @@ $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'dji_compensation_stock_
     KEY `product_type` (`product_type`)
 ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
 
+// Table de l'historique des actions sur une declaration
+$sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'dji_compensation_history` (
+    `id_history` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `id_declaration` int(11) UNSIGNED NOT NULL,
+    `actor_type` enum("customer","employee","system") NOT NULL DEFAULT "customer",
+    `id_actor` int(11) UNSIGNED NOT NULL DEFAULT 0,
+    `actor_name` varchar(255) DEFAULT NULL,
+    `action` varchar(50) NOT NULL,
+    `details` varchar(1000) DEFAULT NULL,
+    `date_add` datetime NOT NULL,
+    PRIMARY KEY (`id_history`),
+    KEY `id_declaration` (`id_declaration`),
+    KEY `date_add` (`date_add`)
+) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
+
 // Table pour l'historique des templates admin
 $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'dji_compensation_template_history` (
     `id_template` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -83,6 +98,19 @@ $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'dji_compensation_templa
     PRIMARY KEY (`id_template`),
     KEY `is_active` (`is_active`),
     KEY `date_add` (`date_add`)
+) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
+
+// Table des telechargements du template par les clients
+// Sert a detecter qu'un client depose une declaration batie sur un template obsolete
+$sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'dji_compensation_template_download` (
+    `id_download` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `id_customer` int(11) UNSIGNED NOT NULL,
+    `id_template` int(11) UNSIGNED DEFAULT NULL,
+    `filename` varchar(255) NOT NULL,
+    `date_add` datetime NOT NULL,
+    PRIMARY KEY (`id_download`),
+    KEY `id_customer` (`id_customer`, `date_add`),
+    KEY `id_template` (`id_template`)
 ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
 
 foreach ($sql as $query) {

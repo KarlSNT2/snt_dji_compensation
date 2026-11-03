@@ -30,6 +30,18 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
     public $authRedirection = 'my-account';
     public $ssl = true;
 
+    /**
+     * Brouillon masque cote front-office.
+     *
+     * Le mecanisme reste entier : le statut "draft" existe toujours, une
+     * declaration est toujours creee en brouillon avant d'etre soumise, et le
+     * back-office comme l'API continuent de le voir. Seule l'action explicite
+     * "Enregistrer brouillon" disparait de la page client.
+     *
+     * Repasser cette constante a true restaure le bouton tel quel.
+     */
+    const DRAFT_ENABLED = false;
+
     private $declaration;
     private $viewMode = false;
 
@@ -56,6 +68,43 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             $filename,
             $this->declaration ? $this->declaration->id : null
         );
+    }
+
+    /**
+     * Enregistre une action du client dans l'historique de la declaration
+     */
+    protected function logHistory($action, $details = null)
+    {
+        if (!$this->declaration || !$this->declaration->id) {
+            return;
+        }
+
+        $customer = $this->context->customer;
+
+        DJICompensationHistory::log(
+            $this->declaration->id,
+            $action,
+            $details,
+            DJICompensationHistory::ACTOR_CUSTOMER,
+            (int) $customer->id,
+            trim($customer->firstname . ' ' . $customer->lastname)
+        );
+    }
+
+    /**
+     * Construit les lignes d'historique enrichies pour l'affichage
+     */
+    protected function buildHistoryRows($idDeclaration)
+    {
+        $rows = DJICompensationHistory::getByDeclaration($idDeclaration, 'DESC');
+
+        foreach ($rows as &$row) {
+            $row['action_label'] = DJICompensationHistory::getActionLabel($row['action']);
+            $row['action_icon'] = DJICompensationHistory::getActionIcon($row['action']);
+            $row['actor_type_label'] = DJICompensationHistory::getActorTypeLabel($row['actor_type']);
+        }
+
+        return $rows;
     }
 
     public function init()
@@ -156,9 +205,25 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             $decl = new DJICompensationDeclaration($item['id_declaration']);
             $item['status_label'] = $decl->getStatusLabel();
             $item['status_class'] = $decl->getStatusBadgeClass();
+
+            // Brouillon masque cote client : un brouillon residuel (upload
+            // interrompu) reste visible, mais sous un libelle neutre. Le
+            // back-office continue d'afficher "Brouillon" via getStatusLabel().
+            if (!self::DRAFT_ENABLED && $decl->status === DJICompensationDeclaration::STATUS_DRAFT) {
+                $item['status_label'] = $this->module->l('En cours', 'declaration');
+            }
         }
 
         $maxFileSize = (int) Configuration::get('SNT_DJI_COMPENSATION_MAX_FILE_SIZE');
+
+        // Le template evolue : un client peut deposer une declaration batie sur
+        // une version anterieure, dont les promotions ne sont plus actives.
+        // On compare sa derniere version telechargee au template actif pour
+        // l'avertir au depot. Simple avertissement : la soumission reste permise.
+        $templateCheck = DJICompensationTemplateDownload::checkAgainstActive(
+            (int) $this->context->customer->id,
+            $this->module->getActiveTemplate()
+        );
 
         $this->context->smarty->assign([
             'declaration' => $this->declaration,
@@ -176,6 +241,10 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             'product_types' => DJICompensationStockProof::getProductTypes(),
             'token' => Tools::getToken(false),
             'xlsx_editable' => !$this->declaration || $this->declaration->isXlsxEditable(),
+            'draft_enabled' => self::DRAFT_ENABLED,
+            'template_outdated' => $templateCheck['is_outdated'],
+            'template_downloaded_at' => $templateCheck['downloaded_at'],
+            'template_updated_at' => $templateCheck['updated_at'],
         ]);
 
         $this->setTemplate('module:snt_dji_compensation/views/templates/front/declaration.tpl');
@@ -221,6 +290,7 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             'xlsx_url' => $xlsxUrl,
             'invoices' => $invoices,
             'stock_proofs' => $stockProofs,
+            'history' => $this->buildHistoryRows($this->declaration->id),
             'declarations_link' => $this->context->link->getModuleLink($this->module->name, 'declaration'),
         ]);
 
@@ -235,15 +305,13 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
         }
 
         // Creer une nouvelle declaration si pas de brouillon
+        $isNewDeclaration = !$this->declaration;
         if (!$this->declaration) {
             $this->declaration = new DJICompensationDeclaration();
             $this->declaration->id_customer = $this->context->customer->id;
             $this->declaration->reference = DJICompensationDeclaration::generateReference();
             $this->declaration->status = DJICompensationDeclaration::STATUS_DRAFT;
         }
-
-        $hasMicPowerProducts = (bool) Tools::getValue('has_mic_power_products');
-        $this->declaration->has_mic_power_products = $hasMicPowerProducts;
 
         try {
             $s3Service = $this->module->getS3Service();
@@ -259,6 +327,10 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             $this->errors[] = $this->module->l('Erreur lors de la sauvegarde.', 'declaration');
             $this->notifyUploadError('declaration', $errorMsg);
             return;
+        }
+
+        if ($isNewDeclaration) {
+            $this->logHistory(DJICompensationHistory::ACTION_DRAFT_CREATED);
         }
 
         // Traiter XLSX (seulement si brouillon)
@@ -277,9 +349,16 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             $this->processInvoicesUpload($s3Service);
         }
 
-        // Traiter photos stock
-        if ($hasMicPowerProducts && isset($_FILES['stock_proofs']) && is_array($_FILES['stock_proofs']['name'])) {
+        // Traiter photos stock (depot facultatif)
+        if (isset($_FILES['stock_proofs']) && is_array($_FILES['stock_proofs']['name'])) {
             $this->processStockProofsUpload($s3Service);
+        }
+
+        // Indicateur Mic/Power deduit de la presence de photos de stock
+        $hasMicPowerProducts = DJICompensationStockProof::countByDeclaration($this->declaration->id) > 0;
+        if ((bool) $this->declaration->has_mic_power_products !== $hasMicPowerProducts) {
+            $this->declaration->has_mic_power_products = $hasMicPowerProducts;
+            $this->declaration->save();
         }
 
         // Soumettre si demande
@@ -289,30 +368,31 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
                 return;
             }
 
-            if (DJICompensationInvoice::countByDeclaration($this->declaration->id) === 0) {
-                $this->errors[] = $this->module->l('Veuillez televerser au moins une facture PDF.', 'declaration');
-                return;
-            }
-
-            if ($hasMicPowerProducts && DJICompensationStockProof::countByDeclaration($this->declaration->id) === 0) {
-                $this->errors[] = $this->module->l('Veuillez televerser des photos de stock pour les produits DJI Mic/Power.', 'declaration');
-                return;
-            }
+            // Les factures PDF et les photos de stock sont facultatives a la soumission.
 
             $wasAlreadySubmitted = $this->declaration->status !== DJICompensationDeclaration::STATUS_DRAFT;
             $this->declaration->status = DJICompensationDeclaration::STATUS_SUBMITTED;
             $this->declaration->save();
 
-            // Reset pour permettre une nouvelle declaration
-            $this->declaration = null;
-
             if ($wasAlreadySubmitted) {
+                $this->logHistory(DJICompensationHistory::ACTION_RESUBMITTED);
                 $this->success[] = $this->module->l('Votre declaration a ete mise a jour avec succes !', 'declaration');
             } else {
+                $this->logHistory(DJICompensationHistory::ACTION_SUBMITTED);
                 $this->success[] = $this->module->l('Votre declaration a ete soumise avec succes !', 'declaration');
             }
+
+            // Reset pour permettre une nouvelle declaration
+            $this->declaration = null;
         } else {
-            $this->success[] = $this->module->l('Brouillon enregistre.', 'declaration');
+            if (!$isNewDeclaration) {
+                $this->logHistory(DJICompensationHistory::ACTION_DRAFT_UPDATED);
+            }
+            // Chemin encore atteignable sans le bouton (soumission implicite du
+            // formulaire) : on enregistre pareil, mais sans nommer le brouillon.
+            $this->success[] = self::DRAFT_ENABLED
+                ? $this->module->l('Brouillon enregistre.', 'declaration')
+                : $this->module->l('Vos fichiers ont ete enregistres.', 'declaration');
         }
 
         $this->redirectWithNotifications($this->context->link->getModuleLink($this->module->name, 'declaration'));
@@ -362,7 +442,10 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             die(json_encode(['success' => false, 'message' => 'Facture non trouvee']));
         }
 
+        $filename = $invoice->original_filename;
+
         if ($invoice->deleteWithS3($s3Service)) {
+            $this->logHistory(DJICompensationHistory::ACTION_INVOICE_DELETED, $filename);
             $this->markDeclarationAsModified();
             die(json_encode([
                 'success' => true,
@@ -383,7 +466,10 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             die(json_encode(['success' => false, 'message' => 'Photo non trouvee']));
         }
 
+        $filename = $stockProof->original_filename;
+
         if ($stockProof->deleteWithS3($s3Service)) {
+            $this->logHistory(DJICompensationHistory::ACTION_STOCK_PROOF_DELETED, $filename);
             $this->markDeclarationAsModified();
             die(json_encode([
                 'success' => true,
@@ -399,8 +485,10 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
     {
         if ($this->declaration->status !== DJICompensationDeclaration::STATUS_DRAFT) {
             $this->declaration->status = DJICompensationDeclaration::STATUS_SUBMITTED;
-            $this->declaration->save();
         }
+
+        // save() rafraichit toujours date_upd (derniere action sur la declaration)
+        $this->declaration->save();
     }
 
     protected function processXlsxUpload($s3Service)
@@ -439,6 +527,8 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
             $errorMsg = 'Echec sauvegarde declaration apres upload XLSX';
             $this->notifyUploadError('xlsx', $errorMsg, $file['name']);
         }
+
+        $this->logHistory(DJICompensationHistory::ACTION_XLSX_UPLOADED, $file['name']);
 
         return true;
     }
@@ -490,6 +580,7 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
                     $this->notifyUploadError('invoice', $errorMsg, $files['name'][$i]);
                 } else {
                     $currentCount++;
+                    $this->logHistory(DJICompensationHistory::ACTION_INVOICE_ADDED, $files['name'][$i]);
                 }
             } else {
                 $errorMsg = 'Echec upload S3 de la facture PDF';
@@ -555,6 +646,11 @@ class Snt_dji_compensationDeclarationModuleFrontController extends ModuleFrontCo
                     $this->notifyUploadError('stock_proof', $errorMsg, $files['name'][$i]);
                 } else {
                     $currentCount++;
+                    $typeLabel = ($productType === DJICompensationStockProof::TYPE_POWER) ? 'DJI Power' : 'DJI Mic';
+                    $this->logHistory(
+                        DJICompensationHistory::ACTION_STOCK_PROOF_ADDED,
+                        $files['name'][$i] . ' (' . $typeLabel . ')'
+                    );
                 }
             } else {
                 $errorMsg = 'Echec upload S3 de la photo de stock';

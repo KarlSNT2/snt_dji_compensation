@@ -46,6 +46,25 @@ class Snt_dji_compensationDownloadModuleFrontController extends ModuleFrontContr
         $filePath = $this->module->getXlsxTemplatePath();
         $downloadName = 'Promotions_DJI_' . date('Y-m-d') . '.xlsx';
 
+        // Tracer la version emportee par le client : elle sera comparee au
+        // template actif au moment ou il deposera sa declaration.
+        // Un echec ici ne doit jamais empecher le telechargement.
+        try {
+            $activeTemplate = $this->module->getActiveTemplate();
+            if ($activeTemplate && $this->context->customer->id) {
+                DJICompensationTemplateDownload::log(
+                    (int) $this->context->customer->id,
+                    isset($activeTemplate['id_template']) ? $activeTemplate['id_template'] : null,
+                    $activeTemplate['filename']
+                );
+            }
+        } catch (Exception $e) {
+            PrestaShopLogger::addLog(
+                'snt_dji_compensation: echec du suivi de telechargement du template - ' . $e->getMessage(),
+                2
+            );
+        }
+
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="' . $downloadName . '"');
         header('Content-Length: ' . filesize($filePath));

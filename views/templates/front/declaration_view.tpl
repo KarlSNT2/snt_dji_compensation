@@ -165,6 +165,54 @@
             </div>
         {/if}
 
+        {* Historique des actions *}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="material-icons">history</i>
+                    {l s='Historique des actions' mod='snt_dji_compensation'}
+                    <span class="badge badge-secondary ml-2">{$history|count}</span>
+                </h6>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    {l s='Toutes les actions menees sur cette declaration sont tracees ci-dessous (utile si plusieurs personnes utilisent le meme compte).' mod='snt_dji_compensation'}
+                </p>
+                {if $history|count > 0}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped mb-0">
+                            <thead>
+                                <tr>
+                                    <th>{l s='Date' mod='snt_dji_compensation'}</th>
+                                    <th>{l s='Auteur' mod='snt_dji_compensation'}</th>
+                                    <th>{l s='Action' mod='snt_dji_compensation'}</th>
+                                    <th>{l s='Details' mod='snt_dji_compensation'}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {foreach from=$history item=event}
+                                    <tr>
+                                        <td><small>{$event.date_add|date_format:'%d/%m/%Y %H:%M:%S'}</small></td>
+                                        <td>
+                                            {if $event.actor_name}{$event.actor_name|escape:'html':'UTF-8'}{else}<span class="text-muted">-</span>{/if}
+                                            <br><small class="text-muted">{$event.actor_type_label|escape:'html':'UTF-8'}</small>
+                                        </td>
+                                        <td>
+                                            <i class="material-icons" style="font-size:16px;vertical-align:middle;">{$event.action_icon|escape:'html':'UTF-8'}</i>
+                                            {$event.action_label|escape:'html':'UTF-8'}
+                                        </td>
+                                        <td>{if $event.details}<small>{$event.details|escape:'html':'UTF-8'}</small>{else}<span class="text-muted">-</span>{/if}</td>
+                                    </tr>
+                                {/foreach}
+                            </tbody>
+                        </table>
+                    </div>
+                {else}
+                    <p class="text-muted mb-0">{l s='Aucune action enregistree' mod='snt_dji_compensation'}</p>
+                {/if}
+            </div>
+        </div>
+
         {* Boutons de navigation *}
         <div class="form-actions d-flex justify-content-between flex-wrap">
             <a href="{$declarations_link}" class="btn btn-outline-secondary mb-2">

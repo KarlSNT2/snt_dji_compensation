@@ -1,0 +1,692 @@
+{
+  "name": "Declarations SN summary",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "7e4c890a-e01d-4300-81b9-f248e1f5e081",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2784,
+        272
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "33c63216-da9e-4981-b0be-a2cb141644ae",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2784,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "env",
+              "name": "env",
+              "value": "prod",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9ca53f9e-2639-4b95-a955-47be7807e53f",
+      "name": "IS DEV",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2560,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "isprod",
+              "leftValue": "={{ $json.env }}",
+              "rightValue": "prod",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "27f9c895-d941-4476-832e-9c942bcb71f9",
+      "name": "IF PROD",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2368,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "url",
+              "name": "site_url",
+              "value": "https://store.sts-distribution.com/",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2f9cf010-b081-4232-bf6b-d87f73bde210",
+      "name": "PROD",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2160,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "url",
+              "name": "site_url",
+              "value": "https://dev-prestashop-2224c0698cb3.prestashop.sh/",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5178d21f-825d-4f16-be6d-8a70cbf32375",
+      "name": "DEV",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2160,
+        464
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "f5feb7ca-7294-476d-b62c-c28ebeb80e1c",
+      "name": "Pass",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -1968,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT reference_article,\n       type_promotion,\n       to_char(date_debut, 'YYYY-MM-DD') AS date_debut,\n       to_char(date_fin,   'YYYY-MM-DD') AS date_fin\nFROM promotions_dji;",
+        "options": {}
+      },
+      "id": "813559d7-1c3a-4e82-8d30-bf6570d4bd79",
+      "name": "GET Promotions Types",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1760,
+        352
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "S4K1CxlHRmNEsUuM",
+          "name": "APP Metier Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "e6dda1a5-23cd-40f2-adde-a11c93d32f70",
+      "name": "Limit",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -1568,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Pass').first().json.site_url }}index.php?fc=module&module=snt_dji_compensation&controller=api&action=declarations-sn-summary&status=processing&limit=20",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "e771651a-d28d-4861-b4eb-3b131cf5a6c8",
+      "name": "GET Declarations SN Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1360,
+        352
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "Qaxzkse7L04xyZ8I",
+          "name": "Module API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "lines",
+        "options": {}
+      },
+      "id": "80d21b85-ea82-4f18-8121-efd60b619355",
+      "name": "Split Out",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -1136,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst promos = $('GET Promotions Types').all().map(i => i.json);\n\n// Normalise une date en 'yyyy-mm-dd'. Accepte ISO et US/FR 'x/y/yyyy'.\nfunction isoDate(s) {\n  s = String(s || '').trim();\n  let m = s.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);\n  if (m) return `${m[1]}-${m[2]}-${m[3]}`;\n  m = s.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})/);\n  if (m) {\n    let a = +m[1], b = +m[2], y = +m[3], mo, da;\n    if (a > 12) { da = a; mo = b; }\n    else if (b > 12) { mo = a; da = b; }\n    else { mo = a; da = b; }\n    return `${y}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`;\n  }\n  return '';\n}\n\n// Vers 'yyyy-mm-dd HH:mm:ss' (accepte le separateur espace ou 'T').\nfunction isoDateTime(dt) {\n  const m = String(dt || '').match(/^(\\d{4})-(\\d{2})-(\\d{2})[ T](\\d{2}):(\\d{2})(?::(\\d{2}))?/);\n  if (m) return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6] || '00'}`;\n  const d = isoDate(dt);\n  return d ? `${d} 00:00:00` : '';\n}\n\nconst num = (v) => (v === null || v === undefined || v === '') ? '' : Number(v);\n\n// Index des promos par reference_article\nconst byRef = {};\nfor (const p of promos) {\n  const r = String(p.reference_article || '').trim();\n  if (!r) continue;\n  (byRef[r] = byRef[r] || []).push({\n    date_debut: isoDate(p.date_debut),\n    date_fin: isoDate(p.date_fin),\n    type_promotion: p.type_promotion || '',\n  });\n}\n\n// Numero de ligne au sein de chaque declaration : cle d'idempotence cote base.\n// Le XLSX etant fige des la soumission, cet ordre est stable d'un run a l'autre.\nconst lineCounters = {};\nconst results = [];\n\nfor (const item of items) {\n  const d = item.json;\n  const ref = String(d.reference_article || '').trim();\n  const dDeb = isoDate(d.date_debut);\n  const cands = byRef[ref] || [];\n\n  // Selection de la bonne periode de promo\n  let promo = null;\n  if (dDeb) promo = cands.find(c => c.date_debut === dDeb);                      // 1. date de debut identique\n  if (!promo && dDeb) promo = cands.find(c => c.date_debut && c.date_fin && c.date_debut <= dDeb && dDeb <= c.date_fin); // 2. periode contenant la date\n  if (!promo && cands.length === 1) promo = cands[0];                            // 3. une seule promo pour la ref\n\n  // Dates officielles de la promo, repli sur celles saisies par le revendeur\n  const dateDebut = (promo && promo.date_debut) || dDeb || '';\n  const dateFin   = (promo && promo.date_fin)   || isoDate(d.date_fin) || '';\n  // La colonne \"Revendeur\" de la feuille SN porte en pratique le type\n  // d'operation ; elle ne sert que de repli si la promo est introuvable.\n  const typePromo = (promo && promo.type_promotion) || d.type_declare || '';\n\n  // 'Societe - Nom'. Les deux parties sont facultatives : on ne veut ni\n  // 'null - Jean Dupont' ni un separateur orphelin.\n  const nomClient = [d.customer_company, d.customer_name]\n    .map(v => String(v == null ? '' : v).trim())\n    .filter(v => v !== '')\n    .join(' - ');\n\n  const idDecl = Number(d.id_declaration) || 0;\n  lineCounters[idDecl] = (lineCounters[idDecl] || 0) + 1;\n\n  // Une ligne SN vaut une unite sauf mention contraire du revendeur.\n  const qte = Number(d.quantite_declaree) || 1;\n  const compensation = num(d.compensation_ht);\n  let total = d.total_compensation_ht;\n  if (total === null || total === undefined || total === '') {\n    total = (compensation !== '') ? Math.round(compensation * qte * 100) / 100 : '';\n  }\n\n  results.push({\n    json: {\n      id_declaration: idDecl,\n      ligne_num: lineCounters[idDecl],\n      id_customer: Number(d.id_customer) || 0,\n      declaration_reference: d.declaration_reference || '',\n      nom_du_client: nomClient,\n      type_de_promo: typePromo,\n      ref_article: ref,\n      designation: d.produit || '',\n      ean: d.ean || '',\n      // Saisie brute conservee pour le Sheet ; la base en derive une forme\n      // normalisee (numero_serie_norm) pour la detection de doublon.\n      numero_serie: String(d.numero_serie || '').trim(),\n      date_debut: dateDebut,\n      date_fin: dateFin,\n      quantite: qte,\n      compensation_ht: compensation,\n      total: total,\n      prix_vente_ttc: num(d.prix_vente_ttc),\n      nouveau_prix_ttc: num(d.nouveau_prix_ttc),\n      date_declaration: isoDateTime(d.declaration_date),\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "id": "15760916-f477-448a-b41b-d5097372f16d",
+      "name": "Map to SN Sheet Columns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -944,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH v AS (\n    SELECT\n        NULLIF($1::text,  '')::int       AS id_declaration,\n        NULLIF($2::text,  '')::int       AS ligne_num,\n        NULLIF($3::text,  '')::int       AS id_customer,\n        NULLIF($4::text,  '')            AS declaration_reference,\n        NULLIF($5::text,  '')            AS nom_du_client,\n        NULLIF($6::text,  '')            AS type_de_promo,\n        NULLIF($7::text,  '')            AS ref_article,\n        NULLIF($8::text,  '')            AS designation,\n        NULLIF($9::text,  '')            AS ean,\n        NULLIF($10::text, '')            AS numero_serie,\n        NULLIF($11::text, '')::date      AS date_debut,\n        NULLIF($12::text, '')::date      AS date_fin,\n        NULLIF($13::text, '')::int       AS quantite,\n        NULLIF($14::text, '')::numeric   AS compensation_ht,\n        NULLIF($15::text, '')::numeric   AS total,\n        NULLIF($16::text, '')::numeric   AS prix_vente_ttc,\n        NULLIF($17::text, '')::numeric   AS nouveau_prix_ttc,\n        NULLIF($18::text, '')::timestamp AS date_declaration\n),\norig AS (\n    -- DJI compense au numero de serie : un meme SN declare deux fois est une\n    -- double demande, que ce soit dans le meme fichier, par le meme revendeur\n    -- ou par un autre. La recherche ne se restreint donc ni au client ni a la\n    -- declaration, elle exclut seulement la ligne courante elle-meme.\n    SELECT e.id_declaration, e.declaration_reference, e.date_declaration, e.nom_du_client\n    FROM public.declarations_sn_export e\n    JOIN v ON e.numero_serie_norm = upper(btrim(v.numero_serie))\n          AND (e.id_declaration, e.ligne_num) IS DISTINCT FROM (v.id_declaration, v.ligne_num)\n    ORDER BY e.date_declaration NULLS LAST, e.id_declaration, e.ligne_num\n    LIMIT 1\n)\nINSERT INTO public.declarations_sn_export (\n    id_declaration, ligne_num, id_customer, declaration_reference,\n    nom_du_client, type_de_promo, ref_article, designation, ean,\n    numero_serie, date_debut, date_fin, quantite, compensation_ht, total,\n    prix_vente_ttc, nouveau_prix_ttc, date_declaration,\n    is_retard, is_doublon,\n    doublon_de_declaration, doublon_de_reference, doublon_de_date, doublon_de_client\n)\nSELECT\n    v.id_declaration, v.ligne_num, v.id_customer, v.declaration_reference,\n    v.nom_du_client, v.type_de_promo, v.ref_article, v.designation, v.ean,\n    v.numero_serie, v.date_debut, v.date_fin, v.quantite, v.compensation_ht, v.total,\n    v.prix_vente_ttc, v.nouveau_prix_ttc, v.date_declaration,\n    COALESCE(v.date_fin IS NOT NULL\n             AND v.date_declaration IS NOT NULL\n             AND v.date_declaration::date > v.date_fin + 7, FALSE),\n    (o.id_declaration IS NOT NULL),\n    o.id_declaration, o.declaration_reference, o.date_declaration, o.nom_du_client\nFROM v LEFT JOIN orig o ON TRUE\nON CONFLICT (id_declaration, ligne_num) DO NOTHING\nRETURNING\n    declaration_reference,\n    nom_du_client,\n    type_de_promo,\n    ref_article,\n    designation,\n    ean,\n    numero_serie,\n    to_char(date_debut,       'YYYY-MM-DD')         AS date_debut_txt,\n    to_char(date_fin,         'YYYY-MM-DD')         AS date_fin_txt,\n    quantite,\n    compensation_ht,\n    total,\n    is_retard,\n    is_doublon,\n    doublon_de_reference,\n    doublon_de_client,\n    to_char(doublon_de_date,  'DD/MM/YYYY')         AS doublon_de_date_txt,\n    to_char(date_declaration, 'DD/MM/YYYY HH24:MI') AS date_declaration_txt;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.id_declaration, $json.ligne_num, $json.id_customer, $json.declaration_reference, $json.nom_du_client, $json.type_de_promo, $json.ref_article, $json.designation, $json.ean, $json.numero_serie, $json.date_debut, $json.date_fin, $json.quantite, $json.compensation_ht, $json.total, $json.prix_vente_ttc, $json.nouveau_prix_ttc, $json.date_declaration] }}"
+        }
+      },
+      "id": "5322c893-6d6b-4700-a1d8-b20a18a75b53",
+      "name": "Insert SN Export Lines",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -752,
+        256
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "S4K1CxlHRmNEsUuM",
+          "name": "APP Metier Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nreturn $input.all().filter(i => i.json && typeof i.json.is_doublon === 'boolean')\n.map(i => {\n  const r = i.json;\n\n  // Une ligne peut cumuler les deux anomalies.\n  const statut = [\n    r.is_retard  ? 'RETARD'  : null,\n    r.is_doublon ? 'DOUBLON' : null,\n  ].filter(Boolean).join(' + ');\n\n  // Le doublon peut venir d'un autre revendeur : on nomme lequel, sinon la\n  // relance commerciale part sur la mauvaise piste.\n  const doublonDe = r.is_doublon\n    ? [r.doublon_de_reference, r.doublon_de_client, r.doublon_de_date_txt]\n        .filter(Boolean).join(' - ')\n    : '';\n\n  // Postgres renvoie les NUMERIC sous forme de chaine : on reconvertit pour que\n  // Google Sheets stocke un nombre et non du texte.\n  const num = (v) => (v === null || v === undefined || v === '') ? 0 : Number(v);\n\n  return {\n    json: {\n      'REF DECLARATION': r.declaration_reference || '',\n      'NOM DU CLIENT': r.nom_du_client || '',\n      'TYPE DE PROMO': r.type_de_promo || '',\n      'REF ARTICLE': r.ref_article || '',\n      'DESIGNATION': r.designation || '',\n      'EAN': r.ean || '',\n      'NUMERO SN': r.numero_serie || '',\n      'DATE DEBUT': r.date_debut_txt || '',\n      'DATE FIN': r.date_fin_txt || '',\n      'QUANTITE': num(r.quantite),\n      'COMPENSATION HT': num(r.compensation_ht),\n      'TOTAL': num(r.total),\n      'STATUT': statut,\n      'DOUBLON DE': doublonDe,\n      'DATE DECLARATION': r.date_declaration_txt || '',\n    }\n  };\n});\n"
+      },
+      "id": "d2783262-b0d0-4b43-9896-02a6c82a33d9",
+      "name": "Format SN for Sheet",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1nKu0c0wxeTO9jC9zKJfTkpBAfAdt3rmO42HDwC73NDU",
+          "mode": "list",
+          "cachedResultName": "DJI Compensations SN",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nKu0c0wxeTO9jC9zKJfTkpBAfAdt3rmO42HDwC73NDU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 11285787,
+          "mode": "list",
+          "cachedResultName": "Feuille 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nKu0c0wxeTO9jC9zKJfTkpBAfAdt3rmO42HDwC73NDU/edit#gid=11285787"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "REF DECLARATION",
+              "displayName": "REF DECLARATION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "NOM DU CLIENT",
+              "displayName": "NOM DU CLIENT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "TYPE DE PROMO",
+              "displayName": "TYPE DE PROMO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "REF ARTICLE",
+              "displayName": "REF ARTICLE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DESIGNATION",
+              "displayName": "DESIGNATION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "EAN",
+              "displayName": "EAN",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "NUMERO SN",
+              "displayName": "NUMERO SN",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DATE DEBUT",
+              "displayName": "DATE DEBUT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DATE FIN",
+              "displayName": "DATE FIN",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "QUANTITE",
+              "displayName": "QUANTITE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "COMPENSATION HT",
+              "displayName": "COMPENSATION HT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "TOTAL",
+              "displayName": "TOTAL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "STATUT",
+              "displayName": "STATUT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DOUBLON DE",
+              "displayName": "DOUBLON DE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DATE DECLARATION",
+              "displayName": "DATE DECLARATION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "d52b9877-8018-41b1-8f2f-eef1571bc4e9",
+      "name": "Google Sheets Append SN",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -336,
+        256
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "googleApi": {
+          "id": "cBgeJAmG4X37rfR8",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Declarations reellement examinees par l'API, y compris celles dont la\n// feuille SN est absente ou vide. Les faire avancer toutes est indispensable :\n// une declaration sans numero de serie resterait sinon en 'processing' et\n// serait relue a chaque run.\n// Les declarations en erreur ne figurent pas dans cette liste : elles seront\n// retentees au prochain passage.\nconst resp = $('GET Declarations SN Summary').first().json;\nconst ids = resp.processed_declarations || [];\nreturn ids.map(id => ({ json: { id_declaration: id } }));\n"
+      },
+      "id": "07d78a24-c26a-45db-87c8-709c6f99a2cf",
+      "name": "Collect Declaration IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1136,
+        496
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "content": "## A configurer avant activation\n\n**1. Google Sheets** — remplacer le documentId\n`REMPLACER_PAR_ID_DU_CLASSEUR_SN` par celui du classeur SN,\npuis selectionner la feuille dans le node.\n\n**2. En-tetes** — poser les 15 colonnes en ligne 1 :\n`REF DECLARATION | NOM DU CLIENT | TYPE DE PROMO | REF ARTICLE | DESIGNATION | EAN | NUMERO SN | DATE DEBUT | DATE FIN | QUANTITE | COMPENSATION HT | TOTAL | STATUT | DOUBLON DE | DATE DECLARATION`\n\nLe mapping se fait PAR NOM : une colonne absente de\nla ligne 1 fait disparaitre la donnee en silence.\n\n**3. Chainage** — ce flux lit `status=processing`,\nque le flux \"Declarations summary\" pose apres son\npropre export. Il le fait passer a `registered`.",
+        "height": 340,
+        "width": 660,
+        "color": 3
+      },
+      "id": "ab917a39-b90f-409c-a07d-d61cb2ed2272",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -2816,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Pass').first().json.site_url }}index.php?fc=module&module=snt_dji_compensation&controller=api&action=update-status&id_declaration={{ $json.id_declaration }}&status=registered",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "options": {}
+      },
+      "id": "1d8891bd-843c-4be2-94b1-1bccae69aea0",
+      "name": "Mark as Registered",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -944,
+        496
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "Qaxzkse7L04xyZ8I",
+          "name": "Module API Token"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "IS DEV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "IS DEV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IS DEV": {
+      "main": [
+        [
+          {
+            "node": "IF PROD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF PROD": {
+      "main": [
+        [
+          {
+            "node": "PROD",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DEV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PROD": {
+      "main": [
+        [
+          {
+            "node": "Pass",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DEV": {
+      "main": [
+        [
+          {
+            "node": "Pass",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass": {
+      "main": [
+        [
+          {
+            "node": "GET Promotions Types",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Promotions Types": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "GET Declarations SN Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Declarations SN Summary": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Collect Declaration IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Map to SN Sheet Columns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map to SN Sheet Columns": {
+      "main": [
+        [
+          {
+            "node": "Insert SN Export Lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert SN Export Lines": {
+      "main": [
+        [
+          {
+            "node": "Format SN for Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format SN for Sheet": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets Append SN",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Declaration IDs": {
+      "main": [
+        [
+          {
+            "node": "Mark as Registered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "71309f60-21b9-4ee4-9175-855d461cda72",
+  "meta": {
+    "instanceId": "10abab15e1cddf9784b936b459605c273cea23a2036f073d0ae4b8f7b6e309cf"
+  },
+  "id": "7XIoSs4vutXNL1Td",
+  "tags": []
+}

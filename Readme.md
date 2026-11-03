@@ -413,6 +413,66 @@ Retourne toutes les lignes declarees de toutes les declarations, avec infos clie
 }
 ```
 
+#### GET /api/dji-compensation/declarations-sn-summary
+
+Retourne les lignes de la feuille "Matrice declaration SN" de chaque declaration :
+une ligne par numero de serie. Pendant de `declarations-summary`, sur la seconde
+feuille du meme fichier client.
+
+Le nom de la feuille et la position de ses en-tetes sont detectes a partir du
+contenu, pour tolerer les versions successives du template.
+
+**Parametres :**
+| Parametre | Type | Description |
+|-----------|------|-------------|
+| status | string | Filtrer par statut (submitted, processing, validated, registered). Le flux n8n utilise `processing` |
+
+**Reponse :**
+```json
+{
+  "success": true,
+  "total_declarations": 3,
+  "total_lines": 2,
+  "processed_declarations": [1, 2, 3],
+  "declarations_without_sn_sheet": [3],
+  "errors": [],
+  "lines": [
+    {
+      "id_declaration": 1,
+      "declaration_reference": "DJI-8BB47F8E",
+      "declaration_status": "processing",
+      "declaration_date": "2026-09-02 11:21:59",
+      "id_customer": 704,
+      "customer_name": "Karl Duponchel",
+      "customer_email": "karl.d@snt2.fr",
+      "customer_company": "SNT2",
+      "customer_siret": "12345678901234",
+      "type_declare": "Promotion avec numero de serie",
+      "reference_article": "AR0055553",
+      "produit": "DJI Mic 2 Transmitter (Pearl White)",
+      "ean": "6941565971388",
+      "numero_serie": "SN123456789",
+      "quantite_declaree": 1,
+      "prix_vente_ttc": 69,
+      "nouveau_prix_ttc": 44,
+      "difference": 25,
+      "compensation_ht": 15,
+      "total_compensation_ht": 15,
+      "date_debut": "2026-08-01",
+      "date_fin": "2026-08-31"
+    }
+  ]
+}
+```
+
+`processed_declarations` liste les declarations **reellement examinees**, y
+compris celles sans ligne SN. C'est cette liste que le flux n8n fait passer au
+statut suivant : sans elle, une declaration sans numero de serie resterait
+indefiniment a relire. Les declarations en erreur en sont absentes, pour etre
+retentees au passage suivant.
+
+Process complet : voir `docs/PROCESS-DECLARATIONS-SN.md`.
+
 ### Exemple d'utilisation avec n8n
 
 #### Synchroniser les clients
