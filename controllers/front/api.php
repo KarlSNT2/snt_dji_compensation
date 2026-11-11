@@ -79,6 +79,9 @@ class Snt_dji_compensationApiModuleFrontController extends ModuleFrontController
             case 'declarations-sn-summary':
                 $this->getDeclarationsSnSummary();
                 break;
+            case 'declarations-merged-summary':
+                $this->getDeclarationsMergedSummary();
+                break;
             default:
                 $this->jsonResponse(['error' => 'Not Found', 'message' => 'Unknown action'], 404);
         }
@@ -985,6 +988,271 @@ class Snt_dji_compensationApiModuleFrontController extends ModuleFrontController
             'errors' => $errors,
             'lines' => $allLines,
         ]);
+    }
+
+    /**
+     * Resume fusionne des deux onglets du fichier client, pour un export
+     * unique dans "DJI Compensations".
+     *
+     * - Type 1 (Promotion, sans numero de serie) : une ligne avec la quantite
+     *   declaree sur l'onglet 1, comme declarations-summary.
+     * - Types 2 et 3 (avec numero de serie) : une ligne par unite, quantite 1,
+     *   chacune portant un SN de l'onglet 2. Le rapprochement se fait sur la
+     *   reference ET la periode (une meme reference peut avoir plusieurs
+     *   promos), avec repli sur la seule reference pour les anciens fichiers
+     *   dont l'onglet SN n'a pas de dates.
+     *
+     * Les ecarts ne sont pas perdus, ils sont signales dans controle_sn :
+     * - SN_MANQUANT  : quantite declaree superieure au nombre de SN fournis ;
+     * - SN_EN_TROP   : plus de SN que la quantite declaree ;
+     * - SANS_QUANTITE: SN fourni pour un produit sans quantite sur l'onglet 1.
+     *
+     * ligne_num est attribue ici, dans un ordre stable (ordre des onglets),
+     * pour que l'insert idempotent cote n8n reste deterministe.
+     */
+    protected function getDeclarationsMergedSummary()
+    {
+        $status = Tools::getValue('status', '');
+        $limit = $this->prepareSummaryBatch();
+        $declarations = $this->getSummaryDeclarations($status, $limit);
+
+        if (empty($declarations)) {
+            $this->jsonResponse([
+                'success' => true,
+                'total_declarations' => 0,
+                'total_lines' => 0,
+                'remaining_declarations' => 0,
+                'processed_declarations' => [],
+                'errors' => [],
+                'lines' => [],
+            ]);
+            return;
+        }
+
+        require_once _PS_MODULE_DIR_ . 'snt_dji_compensation/classes/DJICompensationS3Service.php';
+        require_once _PS_MODULE_DIR_ . 'snt_dji_compensation/classes/DJICompensationXlsxReader.php';
+
+        $s3 = new DJICompensationS3Service();
+        $allLines = [];
+        $errors = [];
+        $processed = [];
+
+        foreach ($declarations as $decl) {
+            $tempFile = null;
+            try {
+                $reader = $this->openDeclarationXlsx($s3, $decl, $tempFile);
+                $lines = $this->buildMergedLines($reader, $this->buildDeclarationContext($decl));
+                unset($reader);
+                foreach ($lines as $line) {
+                    $allLines[] = $line;
+                }
+                $processed[] = (int) $decl['id_declaration'];
+            } catch (Exception $e) {
+                $errors[] = ['id_declaration' => (int) $decl['id_declaration'], 'error' => $e->getMessage()];
+            }
+            if ($tempFile) {
+                @unlink($tempFile);
+            }
+        }
+
+        $this->jsonResponse([
+            'success' => true,
+            'total_declarations' => count($declarations),
+            'total_lines' => count($allLines),
+            'remaining_declarations' => $this->countRemainingSummary($status, $limit, count($declarations)),
+            'processed_declarations' => $processed,
+            'errors' => $errors,
+            'lines' => $allLines,
+        ]);
+    }
+
+    /**
+     * Construit les lignes fusionnees d'un fichier deja ouvert.
+     * Separee de l'endpoint pour pouvoir etre testee sur un fichier local.
+     *
+     * @param DJICompensationXlsxReader $reader
+     * @param array                     $context buildDeclarationContext()
+     * @return array
+     */
+    protected function buildMergedLines($reader, array $context)
+    {
+        // 1. Numeros de serie de l'onglet 2, ranges par cle de rapprochement.
+        $snAliases = $this->getSnColumnAliases();
+        $snByKey = [];   // "REF|debut|fin" => [ [sn, row], ... ]
+        $snByRef = [];   // "REF"           => cles presentes, pour le repli
+        $snSheet = $this->readSnSheet($reader);
+        if ($snSheet !== null) {
+            foreach ($snSheet['data'] as $row) {
+                $norm = $this->normalizeRow($row);
+                $raw = $this->pickColumn($norm, $snAliases['numero_serie']);
+                $raw = $raw !== null ? trim((string) $raw) : '';
+                if ($raw === '' || $this->isTemplateExampleRow($norm, $snAliases, $raw)) {
+                    continue;
+                }
+                $ref = strtoupper(trim((string) $this->pickColumn($norm, $snAliases['reference_article'])));
+                $key = $ref . '|' . $this->excelDateToISO($this->pickColumn($norm, $snAliases['date_debut']))
+                    . '|' . $this->excelDateToISO($this->pickColumn($norm, $snAliases['date_fin']));
+                // Plusieurs SN colles dans une meme cellule : une entree chacun.
+                foreach (preg_split('/[\s,;\/]+/u', $raw, -1, PREG_SPLIT_NO_EMPTY) as $serial) {
+                    $snByKey[$key][] = ['sn' => $serial, 'norm' => $norm];
+                }
+                $snByRef[$ref][$key] = true;
+            }
+        }
+
+        $lines = [];
+        $usedKeys = [];  // cles d'onglet 2 consommees par une ligne de l'onglet 1
+
+        // 2. Lignes de l'onglet 1 avec une quantite.
+        $aliases = $this->getColumnAliases();
+        $promo = $reader->readSheet(1, 1);
+        // Anciens templates : pas de colonne quantite sur l'onglet 1, l'onglet
+        // SN etait alors la declaration elle-meme. Ses SN ne sont pas des ecarts.
+        $headerKeys = [];
+        foreach ($promo['headers'] as $h) {
+            $headerKeys[$this->normalizeHeader((string) $h)] = true;
+        }
+        $promoHasQuantity = $this->pickColumn($headerKeys, $aliases['quantite']) !== null;
+
+        foreach ($promo['data'] as $row) {
+            $norm = $this->normalizeRow($row);
+            $qtyRaw = $this->pickColumn($norm, $aliases['quantite']);
+            $qty = is_numeric($qtyRaw) ? (int) $qtyRaw : 0;
+            if ($qty <= 0) {
+                continue;
+            }
+
+            $base = $this->mergedBaseFields($norm, $aliases);
+            $base['reference_avoir'] = $this->pickColumn($norm, $aliases['reference_avoir']);
+
+            if (!$this->typeNeedsSerial($base['type_promotion'])) {
+                $lines[] = $this->mergedLine($context, $base, $qty, null, null);
+                continue;
+            }
+
+            // Une ligne par unite, chacune avec un SN si disponible.
+            $ref = strtoupper(trim((string) $base['reference_article']));
+            $key = $ref . '|' . $base['date_debut'] . '|' . $base['date_fin'];
+            $pool = $key;
+            if (empty($snByKey[$key]) && !empty($snByRef[$ref])) {
+                // Repli : onglet SN sans dates, ou dates mal recopiees.
+                foreach (array_keys($snByRef[$ref]) as $candidate) {
+                    if (!empty($snByKey[$candidate]) && !isset($usedKeys[$candidate])) {
+                        $pool = $candidate;
+                        break;
+                    }
+                }
+            }
+            $usedKeys[$pool] = $usedKeys[$pool] ?? $base;
+
+            for ($i = 0; $i < $qty; $i++) {
+                $entry = !empty($snByKey[$pool]) ? array_shift($snByKey[$pool]) : null;
+                $lines[] = $this->mergedLine(
+                    $context,
+                    $base,
+                    1,
+                    $entry ? $entry['sn'] : null,
+                    $entry ? null : 'SN_MANQUANT'
+                );
+            }
+        }
+
+        // 3. SN restants : en trop sur une ligne declaree, ou sans quantite.
+        foreach ($snByKey as $key => $entries) {
+            foreach ($entries as $entry) {
+                if (isset($usedKeys[$key])) {
+                    $lines[] = $this->mergedLine($context, $usedKeys[$key], 1, $entry['sn'], 'SN_EN_TROP');
+                } else {
+                    $base = $this->mergedBaseFields($entry['norm'], $snAliases);
+                    $base['reference_avoir'] = null;
+                    $lines[] = $this->mergedLine($context, $base, 1, $entry['sn'], $promoHasQuantity ? 'SANS_QUANTITE' : null);
+                }
+            }
+        }
+
+        foreach ($lines as $i => &$line) {
+            $line['ligne_num'] = $i + 1;
+        }
+        unset($line);
+
+        return $lines;
+    }
+
+    /**
+     * Champs produit communs aux deux onglets (memes noms de cle dans les deux
+     * jeux d'alias, sauf le type et le prix promo).
+     */
+    private function mergedBaseFields(array $norm, array $aliases)
+    {
+        $typeKey = isset($aliases['type_promotion']) ? 'type_promotion' : 'type_declare';
+        $promoKey = isset($aliases['prix_promo_ttc']) ? 'prix_promo_ttc' : 'nouveau_prix_ttc';
+        $ean = $this->pickColumn($norm, $aliases['ean']);
+
+        return [
+            'type_promotion' => $this->pickColumn($norm, $aliases[$typeKey]),
+            'reference_article' => $this->pickColumn($norm, $aliases['reference_article']),
+            'produit' => $this->pickColumn($norm, $aliases['produit']),
+            'ean' => $this->normalizeEan($ean),
+            'prix_vente_ttc' => $this->parseNumber($this->pickColumn($norm, $aliases['prix_vente_ttc'])),
+            'prix_promo_ttc' => $this->parseNumber($this->pickColumn($norm, $aliases[$promoKey])),
+            'compensation_ht' => $this->parseNumber($this->pickColumn($norm, $aliases['compensation_ht'])),
+            'date_debut' => $this->excelDateToISO($this->pickColumn($norm, $aliases['date_debut'])),
+            'date_fin' => $this->excelDateToISO($this->pickColumn($norm, $aliases['date_fin'])),
+            'date_butoir' => isset($aliases['date_butoir'])
+                ? $this->excelDateToISO($this->pickColumn($norm, $aliases['date_butoir']))
+                : null,
+        ];
+    }
+
+    private function mergedLine(array $context, array $base, $qty, $serial, $controle)
+    {
+        return array_merge($context, $base, [
+            'quantite_declaree' => (int) $qty,
+            'total_compensation_ht' => $base['compensation_ht'] !== null
+                ? round($base['compensation_ht'] * $qty, 2)
+                : null,
+            'numero_serie' => $serial,
+            'controle_sn' => $controle,
+        ]);
+    }
+
+    /**
+     * Types 2 (Promotion avec numero de serie) et 3 (Baisse de prix avec numero
+     * de serie). Reconnu au libelle plutot qu'au numero, qui pourrait bouger.
+     */
+    private function typeNeedsSerial($type)
+    {
+        $t = $this->normalizeHeader((string) $type);
+        $t = strtr($t, ['é' => 'e', 'è' => 'e', 'ê' => 'e']);
+        return strpos($t, 'serie') !== false || strpos($t, 'sn') === 0;
+    }
+
+    /**
+     * Ligne d'exemple du template (SN "XXXXXXX", societe "Votre societe...")
+     * laissee telle quelle par le client : a ignorer.
+     */
+    private function isTemplateExampleRow(array $norm, array $snAliases, $serial)
+    {
+        if (preg_match('/^x+$/i', $serial)) {
+            return true;
+        }
+        $type = $this->normalizeHeader((string) $this->pickColumn($norm, $snAliases['type_declare']));
+        return strpos($type, 'votre soci') === 0;
+    }
+
+    /**
+     * EAN stocke comme nombre dans d'anciens fichiers ("6.94156599143E12").
+     */
+    private function normalizeEan($ean)
+    {
+        if ($ean === null || $ean === '') {
+            return null;
+        }
+        $s = trim((string) $ean);
+        if (preg_match('/^\d+(\.\d+)?E\+?\d+$/i', $s)) {
+            $s = number_format((float) $s, 0, '', '');
+        }
+        return $s;
     }
 
     /**
